@@ -1,5 +1,5 @@
 //
-//  CardScanView.swift
+//  CardScannerView.swift
 //  Card Grading Scanner
 //
 //  A clean, modern card-scanning screen:
@@ -147,7 +147,7 @@ struct CameraPreview: UIViewRepresentable {
 
 // MARK: - Main Scan Screen
 
-struct CardScanView: View {
+struct CardScannerView: View {
     @StateObject private var camera = CameraSessionManager()
     @State private var isGeneratingReport = false
 
@@ -386,5 +386,5 @@ private extension View {
 // MARK: - Preview
 
 #Preview {
-    CardScanView()
+    CardScannerView()
 }
