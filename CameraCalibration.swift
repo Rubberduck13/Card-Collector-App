@@ -1,230 +1,58 @@
 import Foundation
-import AVFoundation
-import CoreMedia
 import CoreMotion
+import Combine
+import AVFoundation
 
-public enum CameraCalibrationAlert: Equatable {
-    case ready
-    case insufficientLighting
-    case unstableMotion
-    case focusNotLocked
-}
-
-public struct CameraCalibrationStatus {
-    public let ambientLuxEstimate: Float?
-    public let isFocusLocked: Bool
-    public let isMotionStable: Bool
-    public let alert: CameraCalibrationAlert
-}
-
-@MainActor
-public final class CameraCalibration: NSObject {
-
-    // MARK: - Configuration
-
-    /// Approximate threshold. Tune for your camera pipeline.
-    public var minimumLuxEstimate: Float = 80.0
-
-    /// Maximum allowed device motion (g).
-    public var maximumAccelerationMagnitude: Double = 0.04
-
-    // MARK: - Public State
-
-    public private(set) var ambientLuxEstimate: Float?
-    public private(set) var isFocusLocked = false
-    public private(set) var isMotionStable = true
-
-    // MARK: - Private
-
-    private let captureSession = AVCaptureSession()
-    private let videoOutput = AVCaptureVideoDataOutput()
+@MainActor 
+public final class CameraCalibration: ObservableObject {
+    
+    @Published public var currentPitch: Double = 0.0
+    @Published public var currentRoll: Double = 0.0
+    @Published public var isPerfectlyLevel: Bool = false
+    
     private let motionManager = CMMotionManager()
-
-    private let outputQueue = DispatchQueue(
-        label: "CameraCalibration.VideoQueue"
-    )
-
-    private var videoDevice: AVCaptureDevice?
-
-    // MARK: - Lifecycle
-
-    public override init() {
-        super.init()
-    }
-
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-        stopMonitoring()
-    }
-
-    // MARK: - Monitoring
-
-    public func startMonitoring() throws {
-
-        guard !captureSession.isRunning else { return }
-
-        guard let device = AVCaptureDevice.default(
-            .builtInWideAngleCamera,
-            for: .video,
-            position: .back
-        ) else {
-            throw NSError(
-                domain: "CameraCalibration",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Back camera unavailable."]
-            )
-        }
-
-        videoDevice = device
-
-        let input = try AVCaptureDeviceInput(device: device)
-
-        captureSession.beginConfiguration()
-
-        if captureSession.canAddInput(input) {
-            captureSession.addInput(input)
-        }
-
-        videoOutput.alwaysDiscardsLateVideoFrames = true
-        videoOutput.setSampleBufferDelegate(self, queue: outputQueue)
-
-        if captureSession.canAddOutput(videoOutput) {
-            captureSession.addOutput(videoOutput)
-        }
-
-        captureSession.commitConfiguration()
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(subjectAreaChanged),
-            name: AVCaptureDevice.subjectAreaDidChangeNotification,
-            object: device
-        )
-
-        motionManager.deviceMotionUpdateInterval = 1.0 / 30.0
-
-        if motionManager.isDeviceMotionAvailable {
-            motionManager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
-                guard let self, let motion else { return }
-
-                let a = motion.userAcceleration
-
-                let magnitude = sqrt(
-                    a.x * a.x +
-                    a.y * a.y +
-                    a.z * a.z
-                )
-
-                self.isMotionStable =
-                    magnitude <= self.maximumAccelerationMagnitude
+    private let updateInterval: TimeInterval = 0.1
+    private let maximumAllowedDeviation: Double = 1.5
+    
+    // NEW: System Audio Playback Instance Anchor
+    private var confirmationAudioPlayer: AVAudioPlayer?
+    
+    public init() {}
+    
+    /// Commences high-frequency gyroscope monitoring to enforce leveling rules
+    public func startDeviceLevelMonitoring() {
+        guard motionManager.isDeviceMotionAvailable else { return }
+        
+        motionManager.deviceMotionUpdateInterval = updateInterval
+        motionManager.startDeviceMotionUpdates(to: .main) { [weak self] motionData, error in
+            guard let self = self, let data = motionData else { return }
+            
+            let pitchDegrees = data.attitude.pitch * (180.0 / .pi)
+            let rollDegrees = data.attitude.roll * (180.0 / .pi)
+            
+            Task { @MainActor in
+                self.currentPitch = pitchDegrees
+                self.currentRoll = rollDegrees
+                
+                let isPitchValid = abs(pitchDegrees) <= self.maximumAllowedDeviation
+                let isRollValid = abs(rollDegrees) <= self.maximumAllowedDeviation
+                self.isPerfectlyLevel = isPitchValid && isRollValid
             }
         }
-
-        captureSession.startRunning()
     }
-
-    public func stopMonitoring() {
-
-        if captureSession.isRunning {
-            captureSession.stopRunning()
-        }
-
-        motionManager.stopDeviceMotionUpdates()
-    }
-
-    // MARK: - Validation
-
-    public func calibrationStatus() -> CameraCalibrationStatus {
-
-        let alert: CameraCalibrationAlert
-
-        if let lux = ambientLuxEstimate,
-           lux < minimumLuxEstimate {
-            alert = .insufficientLighting
-        } else if !isMotionStable {
-            alert = .unstableMotion
-        } else if !isFocusLocked {
-            alert = .focusNotLocked
-        } else {
-            alert = .ready
-        }
-
-        return CameraCalibrationStatus(
-            ambientLuxEstimate: ambientLuxEstimate,
-            isFocusLocked: isFocusLocked,
-            isMotionStable: isMotionStable,
-            alert: alert
-        )
-    }
-
-    // MARK: - Focus
-
-    @objc
-    private func subjectAreaChanged() {
-        updateFocusState()
-    }
-
-    private func updateFocusState() {
-
-        guard let device = videoDevice else {
-            isFocusLocked = false
-            return
-        }
-
-        switch device.focusMode {
-        case .locked:
-            isFocusLocked = true
-
-        case .continuousAutoFocus:
-            isFocusLocked = !device.isAdjustingFocus
-
-        case .autoFocus:
-            isFocusLocked = !device.isAdjustingFocus
-
-        @unknown default:
-            isFocusLocked = false
+    
+    /// Releases CoreMotion resources to maximize hardware battery lifecycle
+    public func stopDeviceLevelMonitoring() {
+        if motionManager.isDeviceMotionActive {
+            motionManager.stopDeviceMotionUpdates()
         }
     }
-
-    // MARK: - Exposure → Approximate Lux
-
-    private func updateExposureEstimate(from device: AVCaptureDevice) {
-
-        let duration = CMTimeGetSeconds(device.exposureDuration)
-
-        guard duration > 0 else { return }
-
-        let iso = Double(device.iso)
-
-        // Approximate EV100
-        let ev100 = log2((100.0 * duration) / iso)
-
-        // Approximate lux estimate.
-        let lux = Float(pow(2.0, -ev100) * 2.5)
-
-        ambientLuxEstimate = lux
+    
+    // NEW: Fires off a professional electronic scan chirp using native system beeps
+    public func playSuccessChirp() {
+        // We trigger iOS system sound ID 1108 (the crisp electronic camera focus chirp)
+        // This removes the need to bundle raw audio files, keeping your app under 1MB
+        AudioServicesPlaySystemSound(1108)
     }
 }
 
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
-
-extension CameraCalibration: AVCaptureVideoDataOutputSampleBufferDelegate {
-
-    public func captureOutput(
-        _ output: AVCaptureOutput,
-        didOutput sampleBuffer: CMSampleBuffer,
-        from connection: AVCaptureConnection
-    ) {
-
-        guard let device = videoDevice else {
-            return
-        }
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-
-            self.updateExposureEstimate(from: device)
-            self.updateFocusState()
-        }
-    }
-}
