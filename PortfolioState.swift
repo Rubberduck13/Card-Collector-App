@@ -10,7 +10,7 @@ public struct SavedCard: Identifiable, Codable {
     public let tbCenteringResult: String
     public let predictedGradePSA: Int
     public let calculatedValue: Double
-    public var targetBatchId: UUID? // Links a card directly to a specific batch assignment folder
+    public var targetBatchId: UUID? 
     
     public init(id: UUID = UUID(), name: String, set: String, lrCentering: String, tbCentering: String, predictedGrade: Int, marketValue: Double, batchId: UUID? = nil) {
         self.id = id
@@ -24,7 +24,6 @@ public struct SavedCard: Identifiable, Codable {
     }
 }
 
-// Struct tracking historical value timestamps for Apple Charts trend metrics
 public struct ValueSnapshot: Identifiable, Codable {
     public let id: UUID
     public let date: Date
@@ -37,11 +36,10 @@ public struct ValueSnapshot: Identifiable, Codable {
     }
 }
 
-// NEW: Model wrapping a dedicated bulk submission container folder
 public struct SubmissionBatch: Identifiable, Codable {
     public let id: UUID
     public var batchName: String
-    public var gradingServiceTarget: String // e.g., "PSA", "BGS", "SGC"
+    public var gradingServiceTarget: String 
     public var creationDate: Date
     
     public init(id: UUID = UUID(), name: String, service: String = "PSA", date: Date = Date()) {
@@ -56,7 +54,7 @@ public class PortfolioState: ObservableObject {
     
     @Published public var savedCards: [SavedCard] = []
     @Published public var historicalTrendSnapshots: [ValueSnapshot] = []
-    @Published public var activeSubmissionBatches: [SubmissionBatch] = [] // Tracks user grouping folders
+    @Published public var activeSubmissionBatches: [SubmissionBatch] = [] 
     
     private let storageKeyCards = "com.cardgrader.portfolio.savedcards"
     private let storageKeyTrend = "com.cardgrader.portfolio.trendsnapshots"
@@ -69,7 +67,6 @@ public class PortfolioState: ObservableObject {
     public init() {
         loadDataFromPersistentDisk()
         
-        // Seed default foundational data records if disk workspace returns empty
         if activeSubmissionBatches.isEmpty {
             createNewSubmissionBatch(name: "PSA Quarter Bulk Tier", service: "PSA")
             createNewSubmissionBatch(name: "BGS Express Autographs", service: "BGS")
@@ -79,9 +76,25 @@ public class PortfolioState: ObservableObject {
         }
     }
     
-    // MARK: - Core Portfolio Data Modification Networks
+    // NEW: Simulates standard shifting variations across secondary lab grading companies on the fly
+    public func simulateCrossCompanyScore(for card: SavedCard, targetCompany: String) -> (grade: Double, estimatedValue: Double) {
+        let baseGrade = Double(card.predictedGradePSA)
+        
+        switch targetCompany {
+        case "BGS":
+            // Beckett handles sub-grades strictly; off-centering hits final score harder
+            let adjustedGrade = card.lrCenteringResult.contains("50%") ? baseGrade : max(1.0, baseGrade - 0.5)
+            return (adjustedGrade, card.calculatedValue * 1.15) // BGS 9.5/10 Pristines often command a value premium
+        case "CGC":
+            // CGC focuses heavily on surface micro-defects
+            return (baseGrade, card.calculatedValue * 0.90)
+        default:
+            // Defaults to PSA base metrics
+            return (baseGrade, card.calculatedValue)
+        }
+    }
+    
     public func appendCard(name: String, set: String, lrCentering: String, tbCentering: String, predictedGrade: Int, marketValue: Double) {
-        // Automatically assign card to the newest active batch folder if one exists
         let fallbackBatchId = activeSubmissionBatches.first?.id
         
         let targetNewCard = SavedCard(
@@ -105,7 +118,6 @@ public class PortfolioState: ObservableObject {
         saveDataToPersistentDisk()
     }
     
-    // MARK: - NEW: Bulk Shipping Batch Folder Allocation Networks
     public func createNewSubmissionBatch(name: String, service: String) {
         let newBatch = SubmissionBatch(name: name, service: service)
         activeSubmissionBatches.append(newBatch)
@@ -134,13 +146,11 @@ public class PortfolioState: ObservableObject {
         saveDataToPersistentDisk()
     }
     
-    // MARK: - Document Export Spreadsheet Manifest Generators
     public func generatePrintableSubmissionManifest() -> URL? {
         let manifestDocumentFileName = "Bulk_Grading_Manifest_Invoice.csv"
         guard let deviceCacheDirectoryPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
         
         let outputTargetURL = deviceCacheDirectoryPath.appendingPathComponent(manifestDocumentFileName)
-        
         var csvStringDocumentPayload = "Card Name,Expansion Set,L/R Centering,T/B Centering,Predicted PSA Grade,Market Valuation Projections,Assigned Batch Folder\n"
         
         for asset in savedCards {
@@ -157,7 +167,6 @@ public class PortfolioState: ObservableObject {
         }
     }
     
-    // MARK: - Disk Persistence Engines
     private func saveDataToPersistentDisk() {
         let jsonEncoder = JSONEncoder()
         if let cardsData = try? jsonEncoder.encode(savedCards) {
@@ -205,3 +214,4 @@ public class PortfolioState: ObservableObject {
         saveDataToPersistentDisk()
     }
 }
+
