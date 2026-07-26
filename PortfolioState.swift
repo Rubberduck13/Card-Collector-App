@@ -1,189 +1,207 @@
 import Foundation
-import Combine
-import UIKit
-import PDFKit
+import SwiftUI
 
+// Struct tracking individual card entries committed from the scanner
 public struct SavedCard: Identifiable, Codable {
     public let id: UUID
     public let name: String
     public let setName: String
-    public let scannedDate: Date
-    public let leftRightCentering: String
-    public let topBottomCentering: String
+    public let lrCenteringResult: String
+    public let tbCenteringResult: String
     public let predictedGradePSA: Int
     public let calculatedValue: Double
+    public var targetBatchId: UUID? // Links a card directly to a specific batch assignment folder
     
-    public init(id: UUID = UUID(), name: String, setName: String, scannedDate: Date = Date(), leftRightCentering: String, topBottomCentering: String, predictedGradePSA: Int, calculatedValue: Double) {
+    public init(id: UUID = UUID(), name: String, set: String, lrCentering: String, tbCentering: String, predictedGrade: Int, marketValue: Double, batchId: UUID? = nil) {
         self.id = id
         self.name = name
-        self.setName = setName
-        self.scannedDate = scannedDate
-        self.leftRightCentering = leftRightCentering
-        self.topBottomCentering = topBottomCentering
-        self.predictedGradePSA = predictedGradePSA
-        self.calculatedValue = calculatedValue
+        self.setName = set
+        self.lrCenteringResult = lrCentering
+        self.tbCenteringResult = tbCentering
+        self.predictedGradePSA = predictedGrade
+        self.calculatedValue = marketValue
+        self.targetBatchId = batchId
     }
 }
 
-// Data model for our portfolio historical data plots
-public struct PortfolioSnapshot: Identifiable {
-    public let id = UUID()
+// Struct tracking historical value timestamps for Apple Charts trend metrics
+public struct ValueSnapshot: Identifiable, Codable {
+    public let id: UUID
     public let date: Date
     public let value: Double
+    
+    public init(id: UUID = UUID(), date: Date, value: Double) {
+        self.id = id
+        self.date = date
+        self.value = value
+    }
+}
+
+// NEW: Model wrapping a dedicated bulk submission container folder
+public struct SubmissionBatch: Identifiable, Codable {
+    public let id: UUID
+    public var batchName: String
+    public var gradingServiceTarget: String // e.g., "PSA", "BGS", "SGC"
+    public var creationDate: Date
+    
+    public init(id: UUID = UUID(), name: String, service: String = "PSA", date: Date = Date()) {
+        self.id = id
+        self.batchName = name
+        self.gradingServiceTarget = service
+        self.creationDate = date
+    }
 }
 
 public class PortfolioState: ObservableObject {
     
-    @Published public var savedCards: [SavedCard] = [] {
-        didSet {
-            saveToDisk()
+    @Published public var savedCards: [SavedCard] = []
+    @Published public var historicalTrendSnapshots: [ValueSnapshot] = []
+    @Published public var activeSubmissionBatches: [SubmissionBatch] = [] // Tracks user grouping folders
+    
+    private let storageKeyCards = "com.cardgrader.portfolio.savedcards"
+    private let storageKeyTrend = "com.cardgrader.portfolio.trendsnapshots"
+    private let storageKeyBatches = "com.cardgrader.portfolio.activebatches"
+    
+    public var totalPortfolioValue: Double {
+        savedCards.reduce(0.0) { $0 + $1.calculatedValue }
+    }
+    
+    public init() {
+        loadDataFromPersistentDisk()
+        
+        // Seed default foundational data records if disk workspace returns empty
+        if activeSubmissionBatches.isEmpty {
+            createNewSubmissionBatch(name: "PSA Quarter Bulk Tier", service: "PSA")
+            createNewSubmissionBatch(name: "BGS Express Autographs", service: "BGS")
+        }
+        if historicalTrendSnapshots.isEmpty && totalPortfolioValue > 0 {
+            seedInitialTrendCurveMetrics()
         }
     }
     
-    // NEW: Dynamic timeline points used to draw our graph
-    public var historicalTrendSnapshots: [PortfolioSnapshot] {
-        let calendar = Calendar.current
-        let today = Date()
-        
-        // Simulating 5 data track days to give the chart a realistic curve
-        let baseValue = totalPortfolioValue
-        return [
-            PortfolioSnapshot(date: calendar.date(byAdding: .day, value: -4, to: today)!, value: baseValue * 0.75),
-            PortfolioSnapshot(date: calendar.date(byAdding: .day, value: -3, to: today)!, value: baseValue * 0.82),
-            PortfolioSnapshot(date: calendar.date(byAdding: .day, value: -2, to: today)!, value: baseValue * 0.80),
-            PortfolioSnapshot(date: calendar.date(byAdding: .day, value: -1, to: today)!, value: baseValue * 0.95),
-            PortfolioSnapshot(date: today, value: baseValue)
-        ]
-    }
-    
-    private let storageKey = "com.cardgrader.portfoliostate.data"
-    
-    public init() {
-        loadFromDisk()
-    }
-    
-    public var totalPortfolioValue: Double {
-        savedCards.reduce(0) { $0 + $1.calculatedValue }
-    }
-    
+    // MARK: - Core Portfolio Data Modification Networks
     public func appendCard(name: String, set: String, lrCentering: String, tbCentering: String, predictedGrade: Int, marketValue: Double) {
-        let newCard = SavedCard(
+        // Automatically assign card to the newest active batch folder if one exists
+        let fallbackBatchId = activeSubmissionBatches.first?.id
+        
+        let targetNewCard = SavedCard(
             name: name,
-            setName: set,
-            leftRightCentering: lrCentering,
-            topBottomCentering: tbCentering,
-            predictedGradePSA: predictedGrade,
-            calculatedValue: marketValue
+            set: set,
+            lrCentering: lrCentering,
+            tbCentering: tbCentering,
+            predictedGrade: predictedGrade,
+            marketValue: marketValue,
+            batchId: fallbackBatchId
         )
-        self.savedCards.append(newCard)
+        
+        savedCards.append(targetNewCard)
+        appendLiveTrendSnapshotRecord(with: totalPortfolioValue)
+        saveDataToPersistentDisk()
     }
     
     public func deleteCard(at offsets: IndexSet) {
-        self.savedCards.remove(atOffsets: offsets)
+        savedCards.remove(atOffsets: offsets)
+        appendLiveTrendSnapshotRecord(with: totalPortfolioValue)
+        saveDataToPersistentDisk()
     }
     
-    private func saveToDisk() {
-        if let encodedData = try? JSONEncoder().encode(savedCards) {
-            UserDefaults.standard.set(encodedData, forKey: storageKey)
+    // MARK: - NEW: Bulk Shipping Batch Folder Allocation Networks
+    public func createNewSubmissionBatch(name: String, service: String) {
+        let newBatch = SubmissionBatch(name: name, service: service)
+        activeSubmissionBatches.append(newBatch)
+        saveDataToPersistentDisk()
+    }
+    
+    public func assignCardToBatch(cardId: UUID, batchId: UUID) {
+        if let cardIndex = savedCards.firstIndex(where: { $0.id == cardId }) {
+            let oldCard = savedCards[cardIndex]
+            savedCards[cardIndex] = SavedCard(
+                id: oldCard.id,
+                name: oldCard.name,
+                set: oldCard.setName,
+                lrCentering: oldCard.lrCenteringResult,
+                tbCentering: oldCard.tbCenteringResult,
+                predictedGrade: oldCard.predictedGradePSA,
+                marketValue: oldCard.calculatedValue,
+                batchId: batchId
+            )
+            saveDataToPersistentDisk()
         }
     }
     
-    private func loadFromDisk() {
-        guard let rawData = UserDefaults.standard.data(forKey: storageKey),
-              let decodedCards = try? JSONDecoder().decode([SavedCard].self, from: rawData) else {
-            return
-        }
-        self.savedCards = decodedCards
+    public func removeBatch(at offsets: IndexSet) {
+        activeSubmissionBatches.remove(atOffsets: offsets)
+        saveDataToPersistentDisk()
     }
-    /// Generates a standardized, professional grading manifest document for physical mail-in submittal tasks
+    
+    // MARK: - Document Export Spreadsheet Manifest Generators
     public func generatePrintableSubmissionManifest() -> URL? {
-        let pdfMetaData = [
-            "Subject": "Official Grading Submission Manifest & Technical Report Card",
-            "Author": "AI Grade Professional Card Scanner System"
-        ]
+        let manifestDocumentFileName = "Bulk_Grading_Manifest_Invoice.csv"
+        guard let deviceCacheDirectoryPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
         
-        let formatLayoutFormat = UIGraphicsPDFRendererFormat()
-        formatLayoutFormat.documentInfo = pdfMetaData as [String : Any]
+        let outputTargetURL = deviceCacheDirectoryPath.appendingPathComponent(manifestDocumentFileName)
         
-        // Establish standard physical A4 paper page printing dimension coordinates (8.5 x 11 inches)
-        let pageBoundsWidth: CGFloat = 612
-        let pageBoundsHeight: CGFloat = 792
-        let targetedRenderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: pageBoundsWidth, height: pageBoundsHeight), format: formatLayoutFormat)
+        var csvStringDocumentPayload = "Card Name,Expansion Set,L/R Centering,T/B Centering,Predicted PSA Grade,Market Valuation Projections,Assigned Batch Folder\n"
         
-        // Define local sandbox file storage pathways to host our cached document file
-        let compilationFilename = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("AI_Grade_Submission_Manifest.pdf")
+        for asset in savedCards {
+            let assignedFolderName = activeSubmissionBatches.first(where: { $0.id == asset.targetBatchId })?.batchName ?? "Unassigned Vault"
+            let layoutRowString = "\"\(asset.name)\",\"\(asset.setName)\",\"\(asset.lrCenteringResult)\",\"\(asset.tbCenteringResult)\",\(asset.predictedGradePSA),\(asset.calculatedValue),\"\(assignedFolderName)\"\n"
+            csvStringDocumentPayload.append(layoutRowString)
+        }
         
         do {
-            try targetedRenderer.writePDF(to: compilationFilename) { layoutContext in
-                layoutContext.beginPage()
-                
-                // 1. Draw Title Header Block
-                let mainTitleHeader = "AI GRADE SCANNER: SUBMISSION MANIFEST"
-                let structuralTitleAttributes: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.boldSystemFont(ofSize: 22),
-                    .foregroundColor: UIColor.systemBlue
-                ]
-                mainTitleHeader.draw(at: CGPoint(x: 36, y: 40), withAttributes: structuralTitleAttributes)
-                
-                // 2. Draw Metadata Summary Sub-blocks
-                let generatedSubtitleTimestamp = "Manifest Date: \(Date().description) | Verified Records: \(savedCards.count)"
-                let metadataTextAttributes: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.systemFont(ofSize: 10),
-                    .foregroundColor: UIColor.secondaryLabel
-                ]
-                generatedSubtitleTimestamp.draw(at: CGPoint(x: 36, y: 70), withAttributes: metadataTextAttributes)
-                
-                // Draw a structural dividing line baseline
-                let anchorPath = UIBezierPath()
-                anchorPath.move(to: CGPoint(x: 36, y: 90))
-                anchorPath.addLine(to: CGPoint(x: 576, y: 90))
-                anchorPath.lineWidth = 1
-                UIColor.separator.setStroke()
-                anchorPath.stroke()
-                
-                // 3. Populate Scanned Items Matrix List
-                var runningVerticalYAnchor: CGFloat = 110
-                let tableHeaderColumnTitles = "Asset Name & Set Context Info                          Predicted Grade       Est. Market Value"
-                let subheaderAttributes: [NSAttributedString.Key: Any] = [.font: UIFont.boldSystemFont(ofSize: 11), .foregroundColor: UIColor.label]
-                tableHeaderColumnTitles.draw(at: CGPoint(x: 36, y: runningVerticalYAnchor), withAttributes: subheaderAttributes)
-                runningVerticalYAnchor += 20
-                
-                for singleCardData in savedCards {
-                    // Check paper boundary floor limits to prevent overflow layout breaks
-                    if runningVerticalYAnchor > 720 {
-                        layoutContext.beginPage()
-                        runningVerticalYAnchor = 50
-                    }
-                    
-                    // Render Item Title Row Context Strings
-                    let descriptiveRowString = "\(singleCardData.name) (\(singleCardData.setName))"
-                    let rowDataValueAttributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 10), .foregroundColor: UIColor.label]
-                    descriptiveRowString.draw(at: CGPoint(x: 36, y: runningVerticalYAnchor), withAttributes: rowDataValueAttributes)
-                    
-                    let gradeString = "PSA \(singleCardData.predictedGradePSA)"
-                    gradeString.draw(at: CGPoint(x: 390, y: runningVerticalYAnchor), withAttributes: rowDataValueAttributes)
-                    
-                    let currencyTextString = String(format: "$%.2f", singleCardData.calculatedValue)
-                    let absoluteCurrencyValueAttributes: [NSAttributedString.Key: Any] = [.font: UIFont.boldSystemFont(ofSize: 10), .foregroundColor: UIColor.systemGreen]
-                    currencyTextString.draw(at: CGPoint(x: 500, y: runningVerticalYAnchor), withAttributes: absoluteCurrencyValueAttributes)
-                    
-                    runningVerticalYAnchor += 25
-                }
-                
-                // 4. Render Cumulative Appraisal Financial Block
-                runningVerticalYAnchor += 15
-                let totalNetValueSummaryString = String(format: "Total Estimated Vault Shipment Value Evaluation: $%.2f", totalPortfolioValue)
-                let grandSummaryTextAttributes: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.boldSystemFont(ofSize: 12),
-                    .foregroundColor: UIColor.systemBlue
-                ]
-                totalNetValueSummaryString.draw(at: CGPoint(x: 36, y: runningVerticalYAnchor), withAttributes: grandSummaryTextAttributes)
-            }
-            return compilationFilename
+            try csvStringDocumentPayload.write(to: outputTargetURL, atomically: true, encoding: .utf8)
+            return outputTargetURL
         } catch {
-            print("Failed to complete system PDF layout compilation operations.")
             return nil
         }
     }
+    
+    // MARK: - Disk Persistence Engines
+    private func saveDataToPersistentDisk() {
+        let jsonEncoder = JSONEncoder()
+        if let cardsData = try? jsonEncoder.encode(savedCards) {
+            UserDefaults.standard.set(cardsData, forKey: storageKeyCards)
+        }
+        if let trendData = try? jsonEncoder.encode(historicalTrendSnapshots) {
+            UserDefaults.standard.set(trendData, forKey: storageKeyTrend)
+        }
+        if let batchesData = try? jsonEncoder.encode(activeSubmissionBatches) {
+            UserDefaults.standard.set(batchesData, forKey: storageKeyBatches)
+        }
+    }
+    
+    private func loadDataFromPersistentDisk() {
+        let jsonDecoder = JSONDecoder()
+        if let cardsData = UserDefaults.standard.data(forKey: storageKeyCards),
+           let parsedCards = try? jsonDecoder.decode([SavedCard].self, from: cardsData) {
+            self.savedCards = parsedCards
+        }
+        if let trendData = UserDefaults.standard.data(forKey: storageKeyTrend),
+           let parsedSnapshots = try? jsonDecoder.decode([ValueSnapshot].self, from: trendData) {
+            self.historicalTrendSnapshots = parsedSnapshots
+        }
+        if let batchesData = UserDefaults.standard.data(forKey: storageKeyBatches),
+           let parsedBatches = try? jsonDecoder.decode([SubmissionBatch].self, from: batchesData) {
+            self.activeSubmissionBatches = parsedBatches
+        }
+    }
+    
+    private func appendLiveTrendSnapshotRecord(with currentTotalValue: Double) {
+        let newSnapshot = ValueSnapshot(date: Date(), value: currentTotalValue)
+        historicalTrendSnapshots.append(newSnapshot)
+        if historicalTrendSnapshots.count > 30 { historicalTrendSnapshots.removeFirst() }
+    }
+    
+    private func seedInitialTrendCurveMetrics() {
+        let currentTimeline = Date()
+        self.historicalTrendSnapshots = [
+            ValueSnapshot(date: currentTimeline.addingTimeInterval(-86400 * 4), value: totalPortfolioValue * 0.88),
+            ValueSnapshot(date: currentTimeline.addingTimeInterval(-86400 * 3), value: totalPortfolioValue * 0.92),
+            ValueSnapshot(date: currentTimeline.addingTimeInterval(-86400 * 2), value: totalPortfolioValue * 0.90),
+            ValueSnapshot(date: currentTimeline.addingTimeInterval(-86400 * 1), value: totalPortfolioValue * 0.96),
+            ValueSnapshot(date: currentTimeline, value: totalPortfolioValue)
+        ]
+        saveDataToPersistentDisk()
+    }
 }
-
