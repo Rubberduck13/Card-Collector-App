@@ -76,20 +76,23 @@ public class PortfolioState: ObservableObject {
         }
     }
     
-    // NEW: Simulates standard shifting variations across secondary lab grading companies on the fly
+    // MASTER: Exhaustive five-company pre-grade simulation standard framework
     public func simulateCrossCompanyScore(for card: SavedCard, targetCompany: String) -> (grade: Double, estimatedValue: Double) {
         let baseGrade = Double(card.predictedGradePSA)
         
         switch targetCompany {
         case "BGS":
-            // Beckett handles sub-grades strictly; off-centering hits final score harder
             let adjustedGrade = card.lrCenteringResult.contains("50%") ? baseGrade : max(1.0, baseGrade - 0.5)
-            return (adjustedGrade, card.calculatedValue * 1.15) // BGS 9.5/10 Pristines often command a value premium
+            return (adjustedGrade, card.calculatedValue * 1.15) 
         case "CGC":
-            // CGC focuses heavily on surface micro-defects
             return (baseGrade, card.calculatedValue * 0.90)
+        case "SGC":
+            let adjustedGrade = card.predictedGradePSA >= 10 ? 10.0 : Double(card.predictedGradePSA)
+            return (adjustedGrade, card.calculatedValue * 1.05)
+        case "TAG":
+            let adjustedGrade = card.lrCenteringResult.contains("50%") ? baseGrade : max(1.0, baseGrade - 0.2)
+            return (adjustedGrade, card.calculatedValue * 1.10)
         default:
-            // Defaults to PSA base metrics
             return (baseGrade, card.calculatedValue)
         }
     }
