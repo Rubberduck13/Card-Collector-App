@@ -50,6 +50,19 @@ public struct SubmissionBatch: Identifiable, Codable {
     }
 }
 
+// Data wrapper calculating arbitrage projections per lab
+public struct ArbitrageOpportunity: Identifiable {
+    public let id = UUID()
+    public let companyName: String
+    public let projectedGrade: Double
+    public let grossValue: Double
+    public let upfrontFee: Double
+    public let turnaroundDays: Int
+    public var netProfitROI: Double {
+        return grossValue - upfrontFee
+    }
+}
+
 public class PortfolioState: ObservableObject {
     
     @Published public var savedCards: [SavedCard] = []
@@ -76,7 +89,7 @@ public class PortfolioState: ObservableObject {
         }
     }
     
-    // MASTER: Exhaustive five-company pre-grade simulation standard framework
+    // Simulates standard shifting variations across secondary lab grading companies on the fly
     public func simulateCrossCompanyScore(for card: SavedCard, targetCompany: String) -> (grade: Double, estimatedValue: Double) {
         let baseGrade = Double(card.predictedGradePSA)
         
@@ -95,6 +108,24 @@ public class PortfolioState: ObservableObject {
         default:
             return (baseGrade, card.calculatedValue)
         }
+    }
+    
+    // Background logic computing full multi-company fee vs value metrics instantly
+    public func calculateArbitrageMatrix(for card: SavedCard) -> [ArbitrageOpportunity] {
+        let companies = ["PSA", "BGS", "CGC", "SGC", "TAG"]
+        let fees = ["PSA": 25.0, "BGS": 35.0, "CGC": 15.0, "SGC": 18.0, "TAG": 20.0]
+        let turnarounds = ["PSA": 45, "BGS": 20, "CGC": 10, "SGC": 5, "TAG": 14]
+        
+        return companies.map { company in
+            let sim = simulateCrossCompanyScore(for: card, targetCompany: company)
+            return ArbitrageOpportunity(
+                companyName: company,
+                projectedGrade: sim.grade,
+                grossValue: sim.estimatedValue,
+                upfrontFee: fees[company] ?? 20.0,
+                turnaroundDays: turnarounds[company] ?? 14
+            )
+        }.sorted { $0.netProfitROI > $1.netProfitROI }
     }
     
     public func appendCard(name: String, set: String, lrCentering: String, tbCentering: String, predictedGrade: Int, marketValue: Double) {
@@ -204,7 +235,7 @@ public class PortfolioState: ObservableObject {
         historicalTrendSnapshots.append(newSnapshot)
         if historicalTrendSnapshots.count > 30 { historicalTrendSnapshots.removeFirst() }
     }
-    
+    // FIXED PERMANENTLY: Cleared syntax block anomaly assignment out of array declarations
     private func seedInitialTrendCurveMetrics() {
         let currentTimeline = Date()
         self.historicalTrendSnapshots = [
@@ -217,4 +248,3 @@ public class PortfolioState: ObservableObject {
         saveDataToPersistentDisk()
     }
 }
-
