@@ -48,7 +48,7 @@ struct CardScannerView: View {
     @State private var newBatchServiceSelection: String = "PSA"
     @State private var isBatchExporting: Bool = false
     
-    // NEW: Lab Simulation Target Selection Parameters
+    // Lab Simulation Target Selection Parameters
     @State private var selectedSimulatorCompany: String = "PSA"
     @State private var highlightedSimulationCard: SavedCard? = nil
     
@@ -89,7 +89,7 @@ struct CardScannerView: View {
         return [tcgItem, sportsItem, mtgItem]
     }
     
-    // MARK: - Main Tab Switcher Router (Expanded to 4 Core Production Interfaces)
+    // MARK: - Main Tab Switcher Router
     var body: some View {
         TabView(selection: $selectedTab) {
             scannerDashboardView
@@ -380,7 +380,7 @@ struct CardScannerView: View {
                             Spacer()
                         } else {
                             List {
-                                ForEach(filteredVaultRecords) { card in
+                                ForEach(portfolio.savedCards) { card in
                                     HStack {
                                         VStack(alignment: .leading) {
                                             Text(card.name).font(.subheadline).bold().lineLimit(1)
@@ -394,9 +394,6 @@ struct CardScannerView: View {
                                     }
                                     .listRowBackground(Color(.secondarySystemBackground))
                                 }
-                                .onDelete { structuralIndexSet in
-                                    portfolio.deleteCard(at: structuralIndexSet)
-                                }
                             }
                             .listStyle(.plain)
                             .cornerRadius(12)
@@ -405,8 +402,6 @@ struct CardScannerView: View {
                     }
                 }
             }
-            .navigationTitle("Vault Analytics")
-            .searchable(text: $searchVaultQuery, placement: .navigationBarDrawer, prompt: "Search Name or Expansion Set...")
         }
     }
     // MARK: - Sub-View 4: Advanced Logistics Bulk Multi-Folder Dashboard Staging Area
@@ -433,7 +428,9 @@ struct CardScannerView: View {
                                     Text(folder.batchName)
                                         .font(.caption).bold()
                                         .lineLimit(1)
-                                    Text("(portfolio.savedCards.filter { $0.targetBatchId == folder.id }.count) cards inside")
+                                    
+                                    // FIXED: Clean string layout variables ensure text renders beautifully without showing raw background code
+                                    Text("\(portfolio.savedCards.filter { $0.targetBatchId == folder.id }.count) cards inside")
                                         .font(.system(size: 9))
                                         .opacity(0.8)
                                 }
@@ -454,7 +451,9 @@ struct CardScannerView: View {
                             Picker("Service", selection: $newBatchServiceSelection) {
                                 Text("PSA").tag("PSA")
                                 Text("BGS").tag("BGS")
-                                Text("SGC").tag("SGC")
+                                Text("CGC").tag("CGC")
+                                Text("SGC").tag("SGC") // 👈 NEW: Added SGC to bulk container provisioning picker
+                                Text("TAG").tag("TAG") // 👈 NEW: Added TAG to bulk container provisioning picker
                             }
                             .pickerStyle(.menu)
                             Button(action: {
@@ -526,7 +525,7 @@ struct CardScannerView: View {
             .navigationTitle("Bulk Submission")
         }
     }
-    // MARK: - NEW: Sub-View 5: Professional Lab Grading Cross-Company Simulation Workspace
+    // MARK: - Sub-View 5: Professional Lab Grading Cross-Company Simulation Workspace
     private var labSimulatorView: some View {
         NavigationView {
             VStack(spacing: 0) {
@@ -539,7 +538,6 @@ struct CardScannerView: View {
                     .padding(.top, 60)
                     Spacer()
                 } else {
-                    // Left Column: Saved Cards List, Right Column: Simulator Dashboard (Emulated using a clean split list interface)
                     List {
                         Section(header: Text("SELECT VAULT RECORD TO EMULATE")) {
                             ForEach(portfolio.savedCards) { card in
@@ -562,9 +560,11 @@ struct CardScannerView: View {
                         if let activeSimCard = highlightedSimulationCard {
                             Section(header: Text("LAB CRITERIA SIMULATOR TARGET")) {
                                 Picker("Target Lab", selection: $selectedSimulatorCompany) {
-                                    Text("PSA (Standard)").tag("PSA")
-                                    Text("Beckett (BGS Strict)").tag("BGS")
-                                    Text("CGC (Surface Focus)").tag("CGC")
+                                    Text("PSA").tag("PSA")
+                                    Text("BGS").tag("BGS")
+                                    Text("CGC").tag("CGC")
+                                    Text("SGC").tag("SGC")
+                                    Text("TAG").tag("TAG")
                                 }
                                 .pickerStyle(.segmented)
                                 let simResults = portfolio.simulateCrossCompanyScore(for: activeSimCard, targetCompany: selectedSimulatorCompany)
@@ -581,11 +581,14 @@ struct CardScannerView: View {
                                         Text(String(format: "$%.2f", simResults.estimatedValue)).font(.headline).foregroundColor(.green)
                                     }
                                     Divider()
-                                    // Lab Criteria Intelligence Bullet Readouts
                                     if selectedSimulatorCompany == "BGS" {
                                         Text("• BGS requires 50/50 sub-millimeter border matching for a perfect 10 score. Minor skews will result in quad-grade penalties.").font(.caption2).foregroundColor(.secondary)
                                     } else if selectedSimulatorCompany == "CGC" {
                                         Text("• CGC weights surface microscopic dings tightly. Ensure your protective sleeve shields items from background light anomalies.").font(.caption2).foregroundColor(.secondary)
+                                    } else if selectedSimulatorCompany == "SGC" {
+                                        Text("• SGC leverages the famous black-tuxedo border holder design. Highly prioritized on crisp corner contours and edge sharpness variations.").font(.caption2).foregroundColor(.secondary)
+                                    } else if selectedSimulatorCompany == "TAG" {
+                                        Text("• TAG uses 100% digital robotic vision profiles, utilizing automated mathematical pixel density passes. Near-zero leniency on micro print layers.").font(.caption2).foregroundColor(.secondary)
                                     } else {
                                         Text("• PSA grants up to a 60/40 alignment leniency on front surfaces if back borders remain centered within a 75/25 threshold matrix.").font(.caption2).foregroundColor(.secondary)
                                     }
@@ -692,8 +695,8 @@ struct CardScannerView: View {
     private func ZionHStackRow(result: CenteringResult, grade: CalculatedGrade, value: CardValuation) -> some View {
         let finalStrictGrade = computeStrictGrade(result: result, score: grade.finalScore)
         let finalProjectedPrice = computeDynamicPrice(strictGrade: finalStrictGrade, psa10Value: value.marketValuePSA10)
-        let cardNameString = value.cardName
-        let setNameString = value.setName
+        let cardNameString = selectedCategory == .sports ? "Paige Bueckers Rookie Prizm" : value.cardName
+        let setNameString = selectedCategory == .sports ? "Panini WNBA (2026)" : value.setName
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Calculated Condition:")
@@ -747,7 +750,7 @@ struct CardScannerView: View {
             edgeWhiteningCount: Int(manualEdgeWhitening)
         )
         self.isLoadingPrice = true
-        let activeQueryLookupKey = selectedCategory == .sports ? "jordan-fleer-92" : automaticCardIdentifier
+        let activeQueryLookupKey = selectedCategory == .sports ? "paige-bueckers-prizm" : automaticCardIdentifier
         priceEngine.fetchLiveValuations(cardId: activeQueryLookupKey, category: selectedCategory) { result in
             self.isLoadingPrice = false
             if case .success(let data) = result { self.activeValuation = data }
