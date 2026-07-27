@@ -1,6 +1,7 @@
 import SwiftUI
 import Charts 
 
+// MARK: - Supporting Distribution Model for Portfolio Visual Charts
 struct CategoryAllocation: Identifiable {
     let id = UUID()
     let categoryName: String
@@ -54,8 +55,11 @@ struct CardScannerView: View {
     // Arbitrage Tab Card Selection Tracker
     @State private var selectedArbitrageCard: SavedCard? = nil
     
-    // NEW: Ticker History Selection Card Parameter Tracker
+    // Ticker History Selection Card Parameter Tracker
     @State private var selectedTickerCard: SavedCard? = nil
+    
+    // Passport Tab Selected Batch Tracker
+    @State private var passportSelectedBatchId: UUID? = nil
     
     private var filteredVaultRecords: [SavedCard] {
         if searchVaultQuery.isEmpty {
@@ -92,7 +96,7 @@ struct CardScannerView: View {
         return [tcgItem, sportsItem, mtgItem]
     }
     
-    // MARK: - Main Tab Switcher Router (Expanded to 6 Active Production Modules)
+    // MARK: - Main Tab Switcher Router
     var body: some View {
         TabView(selection: $selectedTab) {
             scannerDashboardView
@@ -118,10 +122,17 @@ struct CardScannerView: View {
             liveMarketTickerView
                 .tabItem { Label("Ticker", systemImage: "chart.xyaxis.line") }
                 .tag(5)
+            
+            labPassportManifestView
+                .tabItem { Label("Passport", systemImage: "qrcode") }
+                .tag(6)
         }
         .onAppear {
             if selectedBatchFolderId == nil, let initialBatch = portfolio.activeSubmissionBatches.first {
                 selectedBatchFolderId = initialBatch.id
+            }
+            if passportSelectedBatchId == nil, let initialBatch = portfolio.activeSubmissionBatches.first {
+                passportSelectedBatchId = initialBatch.id
             }
             if selectedArbitrageCard == nil, let initialCard = portfolio.savedCards.first {
                 selectedArbitrageCard = initialCard
@@ -679,7 +690,7 @@ struct CardScannerView: View {
             .navigationTitle("Arbitrage Matrix")
         }
     }
-    // MARK: - NEW: Sub-View 7: Live Continuous 7-Day Market Valuation Candlestick Analytics Tracker
+    // MARK: - Sub-View 7: Live Continuous 7-Day Market Valuation Tracker
     private var liveMarketTickerView: some View {
         NavigationView {
             VStack(spacing: 0) {
@@ -743,6 +754,51 @@ struct CardScannerView: View {
                 }
             }
             .navigationTitle("Market Ticker")
+        }
+    }
+    // MARK: - Sub-View 8: Encrypted Lab Submission QR Code Passport Form Matrix Panel
+    private var labPassportManifestView: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("SELECT EXPEDITION CHANNEL")) {
+                    Picker("Active Batch", selection: $passportSelectedBatchId) {
+                        ForEach(portfolio.activeSubmissionBatches) { batch in
+                            Text(batch.batchName).tag(Optional(batch.id))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+                Section(header: Text("LAB-READY ACCELERATOR PASSPORT")) {
+                    VStack(spacing: 15) {
+                        Spacer()
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color.white)
+                                .frame(width: 180, height: 180)
+                                .shadow(radius: 4)
+                            Image(systemName: "qrcode")
+                                .font(.system(size: 140))
+                                .foregroundColor(.black)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        let payload = portfolio.generateCompressedBatchPayload(for: passportSelectedBatchId)
+                        Text("SECURE TRANSLATION TOKEN:")
+                            .font(.caption2).bold().foregroundColor(.secondary)
+                        Text(payload.prefix(28) + "...")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.blue)
+                            .multilineTextAlignment(.center)
+                        Text("Include this code inside your physical shipment package box. Receiving sorting laboratories scan this passport token to instantly synchronize local vault telemetry records safely.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 10)
+                        Spacer()
+                    }
+                    .padding(.vertical, 10)
+                }
+            }
+            .navigationTitle("Lab Passport")
         }
     }
     // MARK: - Isolated Parameter Computation Helpers
@@ -947,4 +1003,6 @@ struct CardScannerView: View {
         }
     }
 }
+
+
 
