@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 
-// Struct tracking individual card entries committed from the scanner
 public struct SavedCard: Identifiable, Codable {
     public let id: UUID
     public let name: String
@@ -50,7 +49,6 @@ public struct SubmissionBatch: Identifiable, Codable {
     }
 }
 
-// Data wrapper calculating arbitrage projections per lab
 public struct ArbitrageOpportunity: Identifiable {
     public let id = UUID()
     public let companyName: String
@@ -89,7 +87,6 @@ public class PortfolioState: ObservableObject {
         }
     }
     
-    // Simulates standard shifting variations across secondary lab grading companies on the fly
     public func simulateCrossCompanyScore(for card: SavedCard, targetCompany: String) -> (grade: Double, estimatedValue: Double) {
         let baseGrade = Double(card.predictedGradePSA)
         
@@ -110,7 +107,6 @@ public class PortfolioState: ObservableObject {
         }
     }
     
-    // Background logic computing full multi-company fee vs value metrics instantly
     public func calculateArbitrageMatrix(for card: SavedCard) -> [ArbitrageOpportunity] {
         let companies = ["PSA", "BGS", "CGC", "SGC", "TAG"]
         let fees = ["PSA": 25.0, "BGS": 35.0, "CGC": 15.0, "SGC": 18.0, "TAG": 20.0]
@@ -126,6 +122,19 @@ public class PortfolioState: ObservableObject {
                 turnaroundDays: turnarounds[company] ?? 14
             )
         }.sorted { $0.netProfitROI > $1.netProfitROI }
+    }
+    
+    // NEW: Serializes the highlighted shipment array metadata cleanly into a universal safe text transmission block
+    public func generateCompressedBatchPayload(for batchId: UUID?) -> String {
+        guard let targetId = batchId else { return "NoActiveBatchStaged" }
+        let segmentedList = savedCards.filter { $0.targetBatchId == targetId }
+        guard !segmentedList.isEmpty else { return "BatchEmpty" }
+        
+        var summaryString = "MANIFEST_ID:\(targetId.uuidString.prefix(6))|"
+        for item in segmentedList {
+            summaryString.append("\(item.name.prefix(8))-\(item.predictedGradePSA);")
+        }
+        return summaryString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "SerializationError"
     }
     
     public func appendCard(name: String, set: String, lrCentering: String, tbCentering: String, predictedGrade: Int, marketValue: Double) {
@@ -229,13 +238,11 @@ public class PortfolioState: ObservableObject {
             self.activeSubmissionBatches = parsedBatches
         }
     }
-    
     private func appendLiveTrendSnapshotRecord(with currentTotalValue: Double) {
         let newSnapshot = ValueSnapshot(date: Date(), value: currentTotalValue)
         historicalTrendSnapshots.append(newSnapshot)
         if historicalTrendSnapshots.count > 30 { historicalTrendSnapshots.removeFirst() }
     }
-    // FIXED PERMANENTLY: Cleared syntax block anomaly assignment out of array declarations
     private func seedInitialTrendCurveMetrics() {
         let currentTimeline = Date()
         self.historicalTrendSnapshots = [
@@ -248,3 +255,4 @@ public class PortfolioState: ObservableObject {
         saveDataToPersistentDisk()
     }
 }
+
