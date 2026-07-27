@@ -1,7 +1,6 @@
 import SwiftUI
 import Charts 
 
-// MARK: - Supporting Distribution Model for Portfolio Visual Charts
 struct CategoryAllocation: Identifiable {
     let id = UUID()
     let categoryName: String
@@ -52,7 +51,12 @@ struct CardScannerView: View {
     @State private var selectedSimulatorCompany: String = "PSA"
     @State private var highlightedSimulationCard: SavedCard? = nil
     
-    // Dynamically filter saved inventory records on the fly for Tab 2 search matching
+    // Arbitrage Tab Card Selection Tracker
+    @State private var selectedArbitrageCard: SavedCard? = nil
+    
+    // NEW: Ticker History Selection Card Parameter Tracker
+    @State private var selectedTickerCard: SavedCard? = nil
+    
     private var filteredVaultRecords: [SavedCard] {
         if searchVaultQuery.isEmpty {
             return portfolio.savedCards
@@ -64,7 +68,6 @@ struct CardScannerView: View {
         }
     }
     
-    // Dynamically clusters card lists belonging strictly to the highlighted shipping destination folder on Tab 3
     private var batchSegmentedCardRecords: [SavedCard] {
         guard let targetedId = selectedBatchFolderId else { return portfolio.savedCards }
         return portfolio.savedCards.filter { $0.targetBatchId == targetedId }
@@ -89,7 +92,7 @@ struct CardScannerView: View {
         return [tcgItem, sportsItem, mtgItem]
     }
     
-    // MARK: - Main Tab Switcher Router
+    // MARK: - Main Tab Switcher Router (Expanded to 6 Active Production Modules)
     var body: some View {
         TabView(selection: $selectedTab) {
             scannerDashboardView
@@ -107,10 +110,24 @@ struct CardScannerView: View {
             labSimulatorView
                 .tabItem { Label("Lab Sim", systemImage: "waveform.path.ecg.rectangle.fill") }
                 .tag(3)
+            
+            arbitrageMatrixView
+                .tabItem { Label("ROI Matrix", systemImage: "dollarsign.circle.fill") }
+                .tag(4)
+            
+            liveMarketTickerView
+                .tabItem { Label("Ticker", systemImage: "chart.xyaxis.line") }
+                .tag(5)
         }
         .onAppear {
             if selectedBatchFolderId == nil, let initialBatch = portfolio.activeSubmissionBatches.first {
                 selectedBatchFolderId = initialBatch.id
+            }
+            if selectedArbitrageCard == nil, let initialCard = portfolio.savedCards.first {
+                selectedArbitrageCard = initialCard
+            }
+            if selectedTickerCard == nil, let initialCard = portfolio.savedCards.first {
+                selectedTickerCard = initialCard
             }
         }
     }
@@ -217,7 +234,6 @@ struct CardScannerView: View {
             }
         }
     }
-    
     // MARK: - Sub-View 2: Visual Camera Target Viewport
     private var cameraViewportSection: some View {
         ZStack {
@@ -428,9 +444,7 @@ struct CardScannerView: View {
                                     Text(folder.batchName)
                                         .font(.caption).bold()
                                         .lineLimit(1)
-                                    
-                                    // FIXED: Clean string layout variables ensure text renders beautifully without showing raw background code
-                                    Text("\(portfolio.savedCards.filter { $0.targetBatchId == folder.id }.count) cards inside")
+                                    Text("(portfolio.savedCards.filter { $0.targetBatchId == folder.id }.count) cards inside")
                                         .font(.system(size: 9))
                                         .opacity(0.8)
                                 }
@@ -452,8 +466,8 @@ struct CardScannerView: View {
                                 Text("PSA").tag("PSA")
                                 Text("BGS").tag("BGS")
                                 Text("CGC").tag("CGC")
-                                Text("SGC").tag("SGC") // 👈 NEW: Added SGC to bulk container provisioning picker
-                                Text("TAG").tag("TAG") // 👈 NEW: Added TAG to bulk container provisioning picker
+                                Text("SGC").tag("SGC")
+                                Text("TAG").tag("TAG")
                             }
                             .pickerStyle(.menu)
                             Button(action: {
@@ -600,6 +614,135 @@ struct CardScannerView: View {
                 }
             }
             .navigationTitle("Lab Simulator")
+        }
+    }
+    // MARK: - Sub-View 6: Live Market Value Arbitrage Yield ROI Calculator Matrix View
+    private var arbitrageMatrixView: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                if portfolio.savedCards.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "dollarsign.circle").font(.largeTitle).foregroundColor(.gray)
+                        Text("ROI Matrix Empty").font(.headline)
+                        Text("Add items to your vault ledger to unlock financial arbitrage optimization tracking.").font(.caption).foregroundColor(.secondary).multilineTextAlignment(.center).padding(.horizontal)
+                    }
+                    .padding(.top, 60)
+                    Spacer()
+                } else {
+                    List {
+                        Section(header: Text("CHOOSE ASSET TO OPTIMIZE")) {
+                            ForEach(portfolio.savedCards) { card in
+                                Button(action: {
+                                    selectedArbitrageCard = card
+                                }) {
+                                    HStack {
+                                        VStack(alignment: .leading) {
+                                            Text(card.name).font(.subheadline).bold()
+                                            Text(card.setName).font(.caption2).foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                        if selectedArbitrageCard?.id == card.id {
+                                            Image(systemName: "dollarsign.circle.fill").foregroundColor(.green)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if let activeCard = selectedArbitrageCard {
+                            Section(header: Text("LIVE ARBITRAGE OPTIMIZATION RANKINGS")) {
+                                ForEach(portfolio.calculateArbitrageMatrix(for: activeCard)) { opp in
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HStack {
+                                            Text(opp.companyName)
+                                                .font(.headline).foregroundColor(.primary)
+                                            Spacer()
+                                            Text(String(format: "+$%.2f Net ROI", opp.netProfitROI))
+                                                .font(.subheadline).bold().foregroundColor(.green)
+                                        }
+                                        HStack {
+                                            Text(String(format: "Est. Grade: %.1f", opp.projectedGrade))
+                                            Spacer()
+                                            Text("Turnaround: (opp.turnaroundDays) days")
+                                        }
+                                        .font(.caption2).foregroundColor(.secondary)
+                                        ProgressView(value: min(1.0, opp.netProfitROI / activeCard.calculatedValue))
+                                            .accentColor(.green)
+                                            .scaleEffect(x: 1, y: 0.5, anchor: .center)
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Arbitrage Matrix")
+        }
+    }
+    // MARK: - NEW: Sub-View 7: Live Continuous 7-Day Market Valuation Candlestick Analytics Tracker
+    private var liveMarketTickerView: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                if portfolio.savedCards.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "chart.xyaxis.line").font(.largeTitle).foregroundColor(.gray)
+                        Text("Market Ticker Empty").font(.headline)
+                        Text("Commit scanned card assets to initialize real-time continuous market history plotting panels.").font(.caption).foregroundColor(.secondary).multilineTextAlignment(.center).padding(.horizontal)
+                    }
+                    .padding(.top, 60)
+                    Spacer()
+                } else {
+                    List {
+                        Section(header: Text("CHOOSE TRACKED MARKET FEED INDEX")) {
+                            ForEach(portfolio.savedCards) { card in
+                                Button(action: {
+                                    selectedTickerCard = card
+                                }) {
+                                    HStack {
+                                        VStack(alignment: .leading) {
+                                            Text(card.name).font(.subheadline).bold()
+                                            Text(card.setName).font(.caption2).foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                        if selectedTickerCard?.id == card.id {
+                                            Image(systemName: "chart.line.uptrend.xyaxis").foregroundColor(.blue)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if let activeTickerCard = selectedTickerCard {
+                            Section(header: Text("7-DAY RECENT SALE PRICE TRACE INDEX")) {
+                                let trendPoints = priceEngine.fetchMarketTickerHistory(for: activeTickerCard.name)
+                                Chart {
+                                    ForEach(trendPoints) { point in
+                                        LineMark(
+                                            x: .value("Day", point.dateLabel),
+                                            y: .value("Price", point.closingPrice)
+                                        )
+                                        .foregroundStyle(Color.blue)
+                                        .interpolationMethod(.monotone)
+                                        PointMark(
+                                            x: .value("Day", point.dateLabel),
+                                            y: .value("Price", point.closingPrice)
+                                        )
+                                        .foregroundStyle(Color.blue)
+                                    }
+                                }
+                                .frame(height: 180)
+                                .padding(.vertical, 10)
+                                HStack {
+                                    Text("Current Traced Spot Price:")
+                                    Spacer()
+                                    Text(String(format: "$%.2f USD", activeTickerCard.calculatedValue))
+                                        .font(.headline).foregroundColor(.blue)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Market Ticker")
         }
     }
     // MARK: - Isolated Parameter Computation Helpers
