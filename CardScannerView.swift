@@ -1,7 +1,6 @@
 import SwiftUI
 import Charts 
 
-// MARK: - Supporting Distribution Model for Portfolio Visual Charts
 struct CategoryAllocation: Identifiable {
     let id = UUID()
     let categoryName: String
@@ -60,6 +59,9 @@ struct CardScannerView: View {
     
     // Passport Tab Selected Batch Tracker
     @State private var passportSelectedBatchId: UUID? = nil
+    
+    // Active Monitor Selected Item Target State Tracker
+    @State private var selectedMonitorCard: SavedCard? = nil
     
     private var filteredVaultRecords: [SavedCard] {
         if searchVaultQuery.isEmpty {
@@ -126,6 +128,10 @@ struct CardScannerView: View {
             labPassportManifestView
                 .tabItem { Label("Passport", systemImage: "qrcode") }
                 .tag(6)
+            
+            activeMarketplaceMonitorView
+                .tabItem { Label("Live Deals", systemImage: "cart.badge.plus") }
+                .tag(7)
         }
         .onAppear {
             if selectedBatchFolderId == nil, let initialBatch = portfolio.activeSubmissionBatches.first {
@@ -139,6 +145,9 @@ struct CardScannerView: View {
             }
             if selectedTickerCard == nil, let initialCard = portfolio.savedCards.first {
                 selectedTickerCard = initialCard
+            }
+            if selectedMonitorCard == nil, let initialCard = portfolio.savedCards.first {
+                selectedMonitorCard = initialCard
             }
         }
     }
@@ -801,6 +810,71 @@ struct CardScannerView: View {
             .navigationTitle("Lab Passport")
         }
     }
+    // MARK: - Sub-View 9: Live Global Web Auction Deal Monitor Scan Tracking Dashboard
+    private var activeMarketplaceMonitorView: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                if portfolio.savedCards.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "cart.badge.plus").font(.largeTitle).foregroundColor(.gray)
+                        Text("Auction Tracker Idle").font(.headline)
+                        Text("Commit scanned card assets to initialize global auction arbitrage tracking streams.").font(.caption).foregroundColor(.secondary).multilineTextAlignment(.center).padding(.horizontal)
+                    }
+                    .padding(.top, 60)
+                    Spacer()
+                } else {
+                    List {
+                        Section(header: Text("CHOOSE REPLICA TRACKING TARGET")) {
+                            ForEach(portfolio.savedCards) { card in
+                                Button(action: {
+                                    selectedMonitorCard = card
+                                }) {
+                                    HStack {
+                                        VStack(alignment: .leading) {
+                                            Text(card.name).font(.subheadline).bold()
+                                            Text(card.setName).font(.caption2).foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                        if selectedMonitorCard?.id == card.id {
+                                            Image(systemName: "eye.fill").foregroundColor(.purple)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if let activeMonitorTarget = selectedMonitorCard {
+                            Section(header: Text("ACTIVE LAB LISTINGS RADAR STREAM")) {
+                                ForEach(priceEngine.fetchMarketTickerHistory(for: activeMonitorTarget.name)) { auction in
+                                    HStack(spacing: 12) {
+                                        Image(systemName: auction.closingPrice < activeMonitorTarget.calculatedValue ? "tag.circle.fill" : "circle.grid.cross.fill")
+                                            .font(.title2)
+                                            .foregroundColor(auction.closingPrice < activeMonitorTarget.calculatedValue ? .green : .gray)
+                                        VStack(alignment: .leading) {
+                                            Text("Market Match Deal Instance").font(.subheadline).bold()
+                                            Text(auction.dateLabel).font(.caption2).foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                        VStack(alignment: .trailing) {
+                                            Text(String(format: "$%.2f", auction.closingPrice))
+                                                .font(.subheadline).bold()
+                                                .foregroundColor(auction.closingPrice < activeMonitorTarget.calculatedValue ? .green : .primary)
+                                            if auction.closingPrice < activeMonitorTarget.calculatedValue {
+                                                Text("BELOW VALUE").font(.system(size: 7, weight: .black))
+                                                    .padding(3).background(Color.green.opacity(0.15))
+                                                    .cornerRadius(4).foregroundColor(.green)
+                                            }
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Live Deals Radar")
+        }
+    }
     // MARK: - Isolated Parameter Computation Helpers
     private func computeStrictGrade(result: CenteringResult, score: Double) -> Double {
         if selectedCategory == .sports && !result.passesBGS10 { return max(1.0, score - 0.5) }
@@ -844,7 +918,7 @@ struct CardScannerView: View {
     private func child_slider_surface_layer() -> some View {
         HStack {
             Image(systemName: "sparkles").foregroundColor(.purple)
-            Text("Surface Micro-Scratches: \(Int(manualSurfaceScratches))").font(.subheadline)
+            Text("Surface Micro-Scratches: (Int(manualSurfaceScratches))").font(.subheadline)
             Spacer()
         }
         Slider(value: $manualSurfaceScratches, in: 0...5, step: 1.0) { _ in recomputeLiveGradeFromTuner() }.accentColor(.purple)
@@ -853,7 +927,7 @@ struct CardScannerView: View {
     private func child_slider_edge_layer() -> some View {
         HStack {
             Image(systemName: "bandage.fill").foregroundColor(.orange)
-            Text("Edge Whitening Scuffs: \(Int(manualEdgeWhitening))").font(.subheadline)
+            Text("Edge Whitening Scuffs: (Int(manualEdgeWhitening))").font(.subheadline)
             Spacer()
         }
         Slider(value: $manualEdgeWhitening, in: 0...5, step: 1.0) { _ in recomputeLiveGradeFromTuner() }.accentColor(.orange)
@@ -1003,6 +1077,4 @@ struct CardScannerView: View {
         }
     }
 }
-
-
 
