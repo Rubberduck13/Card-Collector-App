@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CardGrade — Dashboard</title>
+  <meta name="description" content="Phase 1 dashboard for CardGrade: quick pre-grading and wallet inventory." />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5v14h18V5H3zm16 12H5V7h14v10z"/><path fill="currentColor" d="M7 9h10v2H7z"/></svg>
+      <h1>CardGrade</h1>
+    </div>
+    <nav class="top-nav" aria-label="Main">
+      <button class="nav-btn" data-route="dashboard" aria-pressed="true">Dashboard</button>
+      <button class="nav-btn" data-route="inventory">Wallet</button>
+      <button class="nav-btn" data-route="scan">Scan Card</button>
+    </nav>
+    <div class="auth">
+      <button id="loginBtn" class="small">Log in</button>
+    </div>
+  </header>
+
+  <main id="app" class="app-root">
+    <!-- Views are injected by JS. Default content for no-js users: -->
+    <noscript>
+      <section class="static-message">
+        <h2>CardGrade</h2>
+        <p>JavaScript is required to access the interactive dashboard. Please enable JavaScript in your browser.</p>
+      </section>
+    </noscript>
+  </main>
+
+  <!-- Floating scan trigger (mobile-first) -->
+  <input id="cameraInput" type="file" accept="image/*" capture="environment" style="display:none" />
+  <button id="scanBtn" class="scan-btn" aria-label="Scan a new card">
+    <svg viewBox="0 0 24 24" class="camera-icon" aria-hidden="true">
+      <path fill="currentColor" d="M12 8a4 4 0 100 8 4 4 0 000-8zm8-1h-2.2l-1.5-2H7.7L6.2 7H4a2 2 0 00-2 2v8a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/>
+    </svg>
+    Scan
+  </button>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
