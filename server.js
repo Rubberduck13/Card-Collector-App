@@ -4,7 +4,7 @@
  *
  * Notes:
  * - Phase 1 uses in-memory placeholders. Persistence (DB) should be added in Phase 2.
- * - The grading endpoint returns a mock sub-grade report. Replace with real CV pipeline in Phase 2.
+ * - The grading endpoint uses services/grading_engine.js and memory-buffer uploads via multer.
  */
 
 require('dotenv').config();
@@ -15,6 +15,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const multer = require('multer');
+
+const grading = require('./services/grading_engine');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -52,6 +54,9 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
+
+// Memory storage for grading route (req.file.buffer expected)
+const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 /* =========================
    In-memory store (Phase 1)
@@ -116,7 +121,27 @@ app.get('/api/inventory', (req, res) => {
   res.json({ ok: true, inventory });
 });
 
-/* Upload & grade endpoint */
+/* New grading endpoint (memory-buffer via multer) */
+app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file || !req.file.buffer) return res.status(400).json({ error: 'image buffer required' });
+    // options: cardType, debug, weights may be provided via body
+    const opts = {};
+    if (req.body.cardType) opts.cardType = req.body.cardType;
+    if (req.body.debug) opts.debug = req.body.debug === 'true' || req.body.debug === '1';
+    if (req.body.weights) {
+      try { opts.weights = JSON.parse(req.body.weights); } catch (e) { /* ignore */ }
+    }
+    const report = await grading.gradeBuffer(req.file.buffer, opts);
+    // Return exact API shape: { ok: true, report }
+    return res.json({ ok: true, report });
+  } catch (err) {
+    console.error('Grading error', err);
+    return res.status(500).json({ error: err.message || 'grading failed' });
+  }
+});
+
+/* Upload & grade endpoint (disk-backed, legacy Phase 1 route kept for compatibility) */
 app.post('/api/grade/upload', upload.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'image file is required' });
 
