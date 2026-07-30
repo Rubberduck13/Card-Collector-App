@@ -1,1 +1,3 @@
-yes - please commit grade engine and route changes to phase1/scaffold. Also, please add a brief README section documenting the grade endpoint and parameters as you suggested.
+Awesome work! Let's wrap up this phase cleanly. Please go ahead and merge phase1/scaffold into main so all of our working front-end UI and back-end grading engine code sit together on our primary branch. 
+
+Once the merge is complete, you are all set for this phase!
