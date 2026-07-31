@@ -1,1 +1,7 @@
-https://2667cb82-6423-43a1-9eeb-ca89a8ad7f53-00-k8dvua8342vx.worf.replit.dev/#dashboard
+Please create a simple local JSON file-system database system to save our graded cards so they show up on the dashboard. 
+
+We need to:
+1. Create a `data/database.json` file to store card objects.
+2. Build a new backend file `services/storage_engine.js` with functions to save a card and retrieve all cards.
+3. Update our `/api/grade` route to save the results to this database.
+4. Create a new `GET /api/cards` route so the frontend can load the saved card list.
