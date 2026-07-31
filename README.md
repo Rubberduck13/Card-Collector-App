@@ -12,7 +12,7 @@ Files added:
 Usage:
 1. Install dependencies: `npm install`
 2. Start server: `npm start` or `npm run dev` (needs nodemon)
-3. Open http://localhost:3000
+3. Open http://localhost:5000
 
 Notes:
 - Uploaded images are stored in `./uploads` during Phase 1. Replace with cloud storage in production.
