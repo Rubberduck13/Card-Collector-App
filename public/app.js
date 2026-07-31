@@ -1,6 +1,6 @@
 /**
  * public/app.js
- * Phase 1 client-side: lightweight routing, camera trigger, image upload to /api/grade/upload,
+ * Phase 1 client-side: lightweight routing, camera trigger, image upload to /api/grade,
  * inventory rendering, and mock-auth interactions.
  *
  * Guidelines:
@@ -13,7 +13,8 @@
    ------------------------- */
 const api = {
   getInventory: () => fetch('/api/inventory').then(r => r.json()),
-  uploadImage: (formData) => fetch('/api/grade/upload', { method: 'POST', body: formData }).then(r => r.json()),
+  // Use the new memory-buffer grading endpoint so uploads are graded by the real engine.
+  uploadImage: (formData) => fetch('/api/grade', { method: 'POST', body: formData }).then(r => r.json()),
   signup: (payload) => fetch('/api/auth/signup', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(r=>r.json()),
   login: (payload) => fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(r=>r.json())
 };
@@ -162,6 +163,7 @@ function renderInventory() {
 
 /* Scan view (for hash navigation) */
 function renderScanView() {
+  // Fixed truncated template: provide a full input for scanName and preview area
   appRoot.innerHTML = `
     <section class="panel">
       <h2>Scan New Card</h2>
@@ -324,7 +326,7 @@ bootstrap();
    ------------------------- */
 function escapeHtml(s) {
   if (!s) return '';
-  return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]; });
+  return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;', '"':'&quot;',"'":'&#39;'})[m]; });
 }
 
 /* End of app.js */
