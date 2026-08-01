@@ -125,10 +125,70 @@ function saveDatabase(db) {
     db.inventory = db.inventory || [];
     db.categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
     fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), 'utf8');
+    // After saving, broadcast stats to any SSE clients
+    broadcastStats();
   } catch (e) {
     console.error('Failed to save database.json', e);
   }
 }
+
+/* =========================
+   Server-Sent Events (SSE) support
+   Clients can connect to /api/events to receive live stats updates
+   ========================= */
+const sseClients = new Set();
+
+function sendSse(res, eventName, data) {
+  try {
+    res.write(`event: ${eventName}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  } catch (e) {
+    // ignore
+  }
+}
+
+function broadcastStats() {
+  try {
+    const db = loadDatabase();
+    const inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
+    const categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
+    const walletStats = wallet.portfolioStats(inventoryArray);
+    const payload = { ok: true, stats: { inventorySize: inventoryArray.length, categoryCounts, wallet: walletStats } };
+    for (const client of sseClients) {
+      sendSse(client, 'stats', payload);
+    }
+  } catch (e) {
+    console.error('Failed to broadcast stats', e);
+  }
+}
+
+app.get('/api/events', (req, res) => {
+  // SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders && res.flushHeaders();
+
+  // Send a comment to keep connection alive
+  res.write(': connected\n\n');
+
+  // Add to clients
+  sseClients.add(res);
+
+  // Send initial stats immediately
+  try {
+    const db = loadDatabase();
+    const inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
+    const categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
+    const walletStats = wallet.portfolioStats(inventoryArray);
+    const payload = { ok: true, stats: { inventorySize: inventoryArray.length, categoryCounts, wallet: walletStats } };
+    sendSse(res, 'stats', payload);
+  } catch (e) { /* ignore */ }
+
+  req.on('close', () => {
+    sseClients.delete(res);
+  });
+});
 
 /* =========================
    API Routes
