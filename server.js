@@ -95,20 +95,34 @@ function mockGradeImage(filePath) {
 
 /* =========================
    Simple JSON "DB" helpers (data/database.json)
+   Maintains db.inventory and db.categoryCounts { SPORTS, TCG, UNKNOWN }
    ========================= */
 const DB_PATH = path.join(__dirname, 'data', 'database.json');
 function loadDatabase() {
   try {
     const raw = fs.readFileSync(DB_PATH, 'utf8');
-    return JSON.parse(raw);
+    const db = JSON.parse(raw);
+    // Ensure shape
+    if (!Array.isArray(db.inventory)) db.inventory = [];
+    if (!db.categoryCounts || typeof db.categoryCounts !== 'object') {
+      db.categoryCounts = { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
+    } else {
+      db.categoryCounts.SPORTS = db.categoryCounts.SPORTS || 0;
+      db.categoryCounts.TCG = db.categoryCounts.TCG || 0;
+      db.categoryCounts.UNKNOWN = db.categoryCounts.UNKNOWN || 0;
+    }
+    return db;
   } catch (e) {
-    return { inventory: [] };
+    return { inventory: [], categoryCounts: { SPORTS: 0, TCG: 0, UNKNOWN: 0 } };
   }
 }
 function saveDatabase(db) {
   try {
     const dir = path.dirname(DB_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    // Ensure we don't write undefined shapes
+    db.inventory = db.inventory || [];
+    db.categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
     fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), 'utf8');
   } catch (e) {
     console.error('Failed to save database.json', e);
@@ -187,10 +201,15 @@ app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
 
     inventory.unshift(item);
 
-    // Persist to data/database.json
+    // Persist to data/database.json and update counts
     const db = loadDatabase();
     db.inventory = db.inventory || [];
     db.inventory.unshift(item);
+    // increment category count (normalize key)
+    const key = (classification && typeof classification === 'string') ? classification.toUpperCase() : 'UNKNOWN';
+    db.categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
+    if (!Object.prototype.hasOwnProperty.call(db.categoryCounts, key)) db.categoryCounts[key] = 0;
+    db.categoryCounts[key] = (db.categoryCounts[key] || 0) + 1;
     saveDatabase(db);
 
     // Return the same shape the frontend expects
