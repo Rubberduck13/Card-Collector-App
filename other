@@ -1,4 +1,4 @@
-cd ~/Downloads
+my cd ~/Downloads
 unzip scaffold-main.zip -d sports-card-app
 cd sports-card-app/scaffold-main
 npm install
