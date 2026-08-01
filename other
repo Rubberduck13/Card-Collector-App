@@ -1,6 +1,70 @@
-cd ~/Downloads/sports-card-app/Card-Collector-App-main
-npm install
-export HOST=0.0.0.0
-PORT=5000 node server.js
+/**
+ * services/grading_engine.js
+ * AI Edge-Detection & Centering Calculation Engine
+ */
 
+class GradingEngine {
+  /**
+   * Calculates centering ratio based on border pixel thicknesses
+   * @param {Object} borders - { top, bottom, left, right } in pixels
+   * @returns {Object} Centering breakdown and final qualification
+   */
+  calculateCentering(borders) {
+    const { top, bottom, left, right } = borders;
 
+    // 1. Guard clause against invalid or missing edge data
+    if (!top || !bottom || !left || !right) {
+      return this.getMockFallback("Invalid boundary math metrics provided.");
+    }
+
+    // 2. Calculate Total Dimension Spans
+    const totalVertical = top + bottom;
+    const totalHorizontal = left + right;
+
+    // 3. Compute Centering Percentages
+    const topPercent = Math.round((top / totalVertical) * 100);
+    const bottomPercent = 100 - topPercent;
+    
+    const leftPercent = Math.round((left / totalHorizontal) * 100);
+    const rightPercent = 100 - leftPercent;
+
+    // 4. Determine worst-case deviations for grading scales
+    const verticalDev = Math.abs(50 - topPercent);
+    const horizontalDev = Math.abs(50 - leftPercent);
+    const maxDeviation = Math.max(verticalDev, horizontalDev);
+
+    // 5. Map deviation to a structural card grade standard
+    let centeringGrade = 10;
+    if (maxDeviation > 15) centeringGrade = 6;       // Worse than 65/35
+    else if (maxDeviation > 10) centeringGrade = 7;  // Worse than 60/40
+    else if (maxDeviation > 5) centeringGrade = 8;   // Worse than 55/45
+    else if (maxDeviation > 2) centeringGrade = 9;   // Worse than 52/48
+
+    return {
+      success: true,
+      metrics: {
+        vertical: `${topPercent}/${bottomPercent}`,
+        horizontal: `${leftPercent}/${rightPercent}`,
+        maxDeviation: maxDeviation
+      },
+      grade: centeringGrade,
+      status: centeringGrade >= 9 ? "GEM_MINT_ELIGIBLE" : "STANDARD_GRADED"
+    };
+  }
+
+  /**
+   * Defensive fallback to prevent backend server crashes 
+   * if native edge-detection modules drop out.
+   */
+  getMockFallback(reason = "Fallback Active") {
+    console.warn(`[Grading Engine Warning]: ${reason}`);
+    return {
+      success: false,
+      metrics: { vertical: "50/50", horizontal: "50/50", maxDeviation: 0 },
+      grade: 10,
+      status: "MOCK_FALLBACK_DEFAULT"
+    };
+  }
+}
+
+module.exports = new GradingEngine();
