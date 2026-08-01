@@ -1,1 +1,1 @@
-The Scan Card upload button is throwing a red "Error: Failed to fetch" message on submit. Please check public/app.js and update the upload form's fetch request destination route so that it hits the correct relative endpoint or unified port 5000 API layout configured on the backend server.
+The card modal is displaying "Centering: [object Object]" for the detailed metrics breakdown. Please check public/app.js where the card modal data is rendered and ensure it extracts the specific properties (like vertical and horizontal strings) instead of rendering the whole object.
