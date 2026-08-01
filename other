@@ -1,10 +1,24 @@
-      <!-- Search & Realtime Filtering Input Bar -->
-      <div style="margin-bottom: 20px;">
-        <input 
-          type="text" 
-          id="cardSearchInput" 
-          placeholder="🔍 Search cards by name, category, or grade..." 
-          style="width: 100%; padding: 10px 14px; background: #1e293b; border: 1px solid #334155; border-radius: 6px; color: white; font-size: 0.95rem; outline: none; box-sizing: border-box;"
-          oninput="filterInventoryList()"
-        />
-      </div>
+/**
+ * Real-time frontend lookup filtering module for inventory elements
+ */
+function filterInventoryList() {
+  const query = document.getElementById('cardSearchInput').value.toLowerCase();
+  const listContainer = document.getElementById('inventoryList');
+  if (!listContainer) return;
+
+  // 1. Gather all individual element panel rows inside the view list container
+  const cardRows = listContainer.children;
+
+  // 2. Loop through row items and toggle display states dynamically
+  for (let i = 0; i < cardRows.length; i++) {
+    const row = cardRows[i];
+    const textContent = row.textContent.toLowerCase();
+
+    // Show row if it matches query strings, otherwise hide it seamlessly
+    if (textContent.includes(query)) {
+      row.style.display = 'flex';
+    } else {
+      row.style.display = 'none';
+    }
+  }
+}
