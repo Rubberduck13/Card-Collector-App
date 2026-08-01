@@ -12,7 +12,9 @@
    Utilities
    ------------------------- */
 const api = {
-  getInventory: () => fetch('/api/inventory').then(r => r.json()),
+  // Point inventory fetch to the backend service running on port 5000 and the /api/cards endpoint.
+  // This is an absolute URL to ensure the mobile/web client fetches from the correct dev server.
+  getInventory: () => fetch('http://localhost:5000/api/cards').then(r => r.json()),
   // Use the new memory-buffer grading endpoint so uploads are graded by the real engine.
   uploadImage: (formData) => fetch('/api/grade', { method: 'POST', body: formData }).then(r => r.json()),
   signup: (payload) => fetch('/api/auth/signup', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(r=>r.json()),
@@ -170,7 +172,7 @@ function renderScanView() {
       <p class="muted">Use your device camera or upload a photo. For best results, use a plain background and good lighting.</p>
       <div style="margin-top:12px;">
         <button id="openCamera" class="small">Open Camera</button>
-        <input id="scanName" placeholder="Card name (optional)" style="margin-left:12px; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inherit;" />
+        <input id="scanName" placeholder="Card name (optional)" style="margin-left:12px; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inh[...]"
       </div>
       <div id="previewArea" style="margin-top:14px;"></div>
     </section>
@@ -326,7 +328,4 @@ bootstrap();
    ------------------------- */
 function escapeHtml(s) {
   if (!s) return '';
-  return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;', '"':'&quot;',"'":'&#39;'})[m]; });
-}
-
-/* End of app.js */
+  return String(s).replace(/[&<>\
