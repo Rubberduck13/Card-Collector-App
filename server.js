@@ -18,6 +18,7 @@ const multer = require('multer');
 
 const grading = require('./services/grading_engine');
 const classifier = require('./services/classifier_engine');
+const wallet = require('./services/wallet_engine');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -165,6 +166,19 @@ app.get('/api/categories', (req, res) => {
     return res.json({ ok: true, categoryCounts: db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 } });
   } catch (e) {
     return res.status(500).json({ error: 'failed to load category counts' });
+  }
+});
+
+/* Wallet stats: returns total combined value and breakdown per category */
+app.get('/api/wallet/stats', (req, res) => {
+  try {
+    const db = loadDatabase();
+    const items = Array.isArray(db.inventory) ? db.inventory : [];
+    const stats = wallet.portfolioStats(items);
+    return res.json({ ok: true, stats });
+  } catch (e) {
+    console.error('Failed to compute wallet stats', e);
+    return res.status(500).json({ error: 'failed to compute wallet stats' });
   }
 });
 
