@@ -1,3 +1,1 @@
-  if (state.user && state.user.username) {
-    document.getElementById('loginBtn').textContent = `👤 ${state.user.username}`;
-  }
+loginBtn.textContent = `👤 ${state.user.username}`;
