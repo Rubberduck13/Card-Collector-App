@@ -182,6 +182,20 @@ app.get('/api/wallet/stats', (req, res) => {
   }
 });
 
+/* Unified stats endpoint: inventory size, categoryCounts, wallet totals */
+app.get('/api/stats', (req, res) => {
+  try {
+    const db = loadDatabase();
+    const inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
+    const categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
+    const walletStats = wallet.portfolioStats(inventoryArray);
+    return res.json({ ok: true, stats: { inventorySize: inventoryArray.length, categoryCounts, wallet: walletStats } });
+  } catch (e) {
+    console.error('Failed to compute unified stats', e);
+    return res.status(500).json({ error: 'failed to compute stats' });
+  }
+});
+
 /* New grading endpoint (memory-buffer via multer)
    This route now saves the uploaded buffer to the local uploads directory,
    runs classification then the grading engine on the buffer, and returns a full `item` object
