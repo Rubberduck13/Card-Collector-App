@@ -1,4 +1,15 @@
-const sharp = require('sharp');
+// Defensive require: if `sharp` is not installed the grading engine will not crash.
+// Instead we return a safe fallback report from gradeBuffer.
+let sharp = null;
+try {
+  sharp = require('sharp');
+} catch (e) {
+  // Do not throw. Log and allow the rest of the module to load.
+  // The gradeBuffer function checks for `sharp` and returns a defensive report when it's missing.
+  // This keeps the service up even in environments where native deps aren't available.
+  // eslint-disable-next-line no-console
+  console.warn('services/grading_engine: optional dependency `sharp` not available — grading will return fallback reports.');
+}
 
 /**
  * services/grading_engine.js
@@ -9,13 +20,13 @@ const sharp = require('sharp');
  * JSON object with the following shape (Phase 1 API Output Format expected):
  *
  * {
- *   centering: number (0-100),
- *   corners: number (0-100),
- *   edges: number (0-100),
- *   surface: number (0-100),
- *   weighted: number (0-100),
- *   label: string,
- *   notes: string
+ *  centering: number (0-100),
+ *  corners: number (0-100),
+ *  edges: number (0-100),
+ *  surface: number (0-100),
+ *  weighted: number (0-100),
+ *  label: string,
+ *  notes: string
  * }
  *
  * Usage (Express route example):
@@ -54,6 +65,20 @@ function gradientAbs(arr) {
 
 async function gradeBuffer(buffer, options = {}) {
   options = Object.assign({ maxDim: 900, debug: false, cardType: 'generic' }, options);
+
+  // Defensive early exit when sharp isn't available: return a stable, non-throwing fallback report.
+  if (!sharp) {
+    return {
+      centering: 0,
+      corners: 0,
+      edges: 0,
+      surface: 0,
+      weighted: 0,
+      label: 'Unknown',
+      notes: 'grading skipped: optional dependency `sharp` not installed'
+    };
+  }
+
   try {
     // 1) Preprocess: rotate to correct orientation, resize to reasonable processing size,
     // convert to greyscale and normalize to reduce smartphone sharpening artifacts.
