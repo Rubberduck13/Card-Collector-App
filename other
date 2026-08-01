@@ -1,7 +1,6 @@
-my cd ~/Downloads
-unzip scaffold-main.zip -d sports-card-app
-cd sports-card-app/scaffold-main
+cd ~/Downloads/sports-card-app/Card-Collector-App-main
 npm install
 export HOST=0.0.0.0
 PORT=5000 node server.js
+
 
