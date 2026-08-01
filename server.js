@@ -158,6 +158,16 @@ app.get('/api/inventory', (req, res) => {
   res.json({ ok: true, inventory });
 });
 
+/* Category counts endpoint - returns live counters from data/database.json */
+app.get('/api/categories', (req, res) => {
+  try {
+    const db = loadDatabase();
+    return res.json({ ok: true, categoryCounts: db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 } });
+  } catch (e) {
+    return res.status(500).json({ error: 'failed to load category counts' });
+  }
+});
+
 /* New grading endpoint (memory-buffer via multer)
    This route now saves the uploaded buffer to the local uploads directory,
    runs classification then the grading engine on the buffer, and returns a full `item` object
