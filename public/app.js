@@ -335,13 +335,16 @@ async function bootstrap() {
     console.warn('Could not fetch inventory', err);
   }
 
-  // load unified stats from server (port 5000)
+  // load unified stats from server (port 5000) — one-time fetch for immediate UI fill
   try {
     const s = await api.getStats();
     if (s && s.ok) state.stats = s;
   } catch (err) {
-    console.warn('Could not fetch stats', err);
+    console.warn('Could not fetch stats (initial)', err);
   }
+
+  // Start SSE for live updates (or polling fallback)
+  initSse();
 
   // initial render based on hash
   const route = location.hash.replace('#','') || 'dashboard';
@@ -387,3 +390,54 @@ function updateStatsUI() {
   if (pendingEl) pendingEl.textContent = '0';
 }
 
+// Initialize Server-Sent Events for live stats updates (fallbacks to polling)
+function initSse() {
+  // Attempt native EventSource first
+  if (window.EventSource) {
+    try {
+      const es = new EventSource('http://localhost:5000/api/events');
+
+      es.addEventListener('stats', (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload && payload.ok) {
+            state.stats = payload;
+            updateStatsUI();
+          }
+        } catch (err) {
+          console.warn('Failed to parse SSE stats payload', err);
+        }
+      });
+
+      es.onopen = () => {
+        console.log('SSE connected to /api/events');
+      };
+      es.onerror = (err) => {
+        console.warn('SSE error, will attempt reconnect in 5s', err);
+        try { es.close(); } catch (_) {}
+        // backoff reconnect
+        setTimeout(initSse, 5000);
+      };
+
+      // store reference to allow manual close if needed
+      window._sseEventSource = es;
+      return;
+    } catch (e) {
+      console.warn('SSE initialization failed, falling back to polling', e);
+    }
+  }
+
+  // Fallback: polling every 10s
+  console.warn('EventSource not available; falling back to polling for stats (10s interval).');
+  window._ssePoller = setInterval(async () => {
+    try {
+      const s = await api.getStats();
+      if (s && s.ok) {
+        state.stats = s;
+        updateStatsUI();
+      }
+    } catch (err) {
+      // ignore poll error
+    }
+  }, 10000);
+}
