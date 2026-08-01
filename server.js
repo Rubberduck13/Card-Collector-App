@@ -17,6 +17,7 @@ const morgan = require('morgan');
 const multer = require('multer');
 
 const grading = require('./services/grading_engine');
+const classifier = require('./services/classifier_engine');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -93,6 +94,28 @@ function mockGradeImage(filePath) {
 }
 
 /* =========================
+   Simple JSON "DB" helpers (data/database.json)
+   ========================= */
+const DB_PATH = path.join(__dirname, 'data', 'database.json');
+function loadDatabase() {
+  try {
+    const raw = fs.readFileSync(DB_PATH, 'utf8');
+    return JSON.parse(raw);
+  } catch (e) {
+    return { inventory: [] };
+  }
+}
+function saveDatabase(db) {
+  try {
+    const dir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), 'utf8');
+  } catch (e) {
+    console.error('Failed to save database.json', e);
+  }
+}
+
+/* =========================
    API Routes
    ========================= */
 
@@ -123,9 +146,9 @@ app.get('/api/inventory', (req, res) => {
 
 /* New grading endpoint (memory-buffer via multer)
    This route now saves the uploaded buffer to the local uploads directory,
-   runs the grading engine on the buffer, and returns a full `item` object
+   runs classification then the grading engine on the buffer, and returns a full `item` object
    (matching the legacy /api/grade/upload response) so the frontend can
-   stay consistent. In Phase 2 you may switch to cloud storage and a DB.
+   stay consistent. The item will be persisted into data/database.json.
 */
 app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
   try {
@@ -146,24 +169,34 @@ app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
     const filePath = path.join(uploadsDir, filename);
     await fs.promises.writeFile(filePath, req.file.buffer);
 
-    // Run the grading engine on the buffer
+    // 1) Classify the card (SPORTS | TCG | UNKNOWN)
+    const classification = await classifier.classifyBuffer(req.file.buffer, { filename: orig });
+
+    // 2) Run the grading engine on the buffer
     const report = await grading.gradeBuffer(req.file.buffer, opts);
 
-    // Create inventory entry
+    // 3) Build item metadata and persist to in-memory and database.json
     const item = {
       id: String(Date.now()),
       name: req.body.name || safe || 'Untitled Card',
       imagePath: `/uploads/${filename}`,
+      category: classification,
       gradingReport: report,
       createdAt: new Date().toISOString()
     };
 
     inventory.unshift(item);
 
+    // Persist to data/database.json
+    const db = loadDatabase();
+    db.inventory = db.inventory || [];
+    db.inventory.unshift(item);
+    saveDatabase(db);
+
     // Return the same shape the frontend expects
     return res.json({ ok: true, item });
   } catch (err) {
-    console.error('Grading error', err);
+    console.error('Grading/classification error', err);
     return res.status(500).json({ error: err.message || 'grading failed' });
   }
 });
