@@ -12,10 +12,11 @@
    Utilities
    ------------------------- */
 const api = {
-  // Point inventory fetch to the backend service running on port 5000 and the /api/cards endpoint.
-  // This is an absolute URL to ensure the mobile/web client fetches from the correct dev server.
-  getInventory: () => fetch('http://localhost:5000/api/cards').then(r => r.json()),
-  // Use the new memory-buffer grading endpoint so uploads are graded by the real engine.
+  // Inventory fetch (keeps legacy behavior if available)
+  getInventory: () => fetch('http://localhost:5000/api/inventory').then(r => r.json()),
+  // GET unified stats from the backend on port 5000
+  getStats: () => fetch('http://localhost:5000/api/stats').then(r => r.json()),
+  // Use the memory-buffer grading endpoint so uploads are graded by the real engine.
   uploadImage: (formData) => fetch('/api/grade', { method: 'POST', body: formData }).then(r => r.json()),
   signup: (payload) => fetch('/api/auth/signup', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(r=>r.json()),
   login: (payload) => fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(r=>r.json())
@@ -32,7 +33,8 @@ const loginBtn = document.getElementById('loginBtn');
    ------------------------- */
 let state = {
   inventory: [],
-  user: null
+  user: null,
+  stats: null
 };
 
 /* -------------------------
@@ -70,9 +72,9 @@ function renderDashboard() {
             <p class="muted">Pre-grade scans & quick wallet overview</p>
           </div>
           <div class="metrics">
-            <div class="metric"><div class="value">${state.inventory.length}</div><div class="label">Total Cards</div></div>
-            <div class="metric"><div class="value">—</div><div class="label">Avg Grade (mock)</div></div>
-            <div class="metric"><div class="value">0</div><div class="label">Pending Uploads</div></div>
+            <div class="metric"><div id="totalCardsValue" class="value">${state.inventory.length}</div><div class="label">Total Cards</div></div>
+            <div class="metric"><div id="walletValue" class="value">—</div><div class="label">Wallet Value (USD)</div></div>
+            <div class="metric"><div id="pendingUploadsValue" class="value">0</div><div class="label">Pending Uploads</div></div>
           </div>
         </div>
 
@@ -85,12 +87,17 @@ function renderDashboard() {
       <aside class="panel">
         <h3>Wallet</h3>
         <div id="walletList" class="wallet-list"></div>
+        <div style="margin-top:12px">
+          <h4>Category Breakdown</h4>
+          <div id="categoryBadges" style="display:flex; gap:8px; flex-wrap:wrap"></div>
+        </div>
       </aside>
     </section>
   `;
 
   renderCardGrid();
   renderWallet();
+  updateStatsUI();
 }
 
 function renderCardGrid() {
@@ -125,6 +132,7 @@ function renderWallet() {
     list.innerHTML = `<div class="muted">Your wallet is empty.</div>`;
     return;
   }
+  // show top items
   state.inventory.slice(0, 12).forEach(item => {
     const row = document.createElement('div');
     row.className = 'wallet-item';
@@ -138,6 +146,12 @@ function renderWallet() {
     row.addEventListener('click', () => openReportModal(item));
     list.appendChild(row);
   });
+
+  // also show wallet totals if available
+  if (state.stats && state.stats.stats && state.stats.stats.wallet) {
+    const totalElem = document.getElementById('walletValue');
+    if (totalElem) totalElem.textContent = `$${(state.stats.stats.wallet.totalValue || 0).toFixed(2)}`;
+  }
 }
 
 function renderInventory() {
@@ -172,7 +186,7 @@ function renderScanView() {
       <p class="muted">Use your device camera or upload a photo. For best results, use a plain background and good lighting.</p>
       <div style="margin-top:12px;">
         <button id="openCamera" class="small">Open Camera</button>
-        <input id="scanName" placeholder="Card name (optional)" style="margin-left:12px; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inh[...]"
+        <input id="scanName" placeholder="Card name (optional)" style="margin-left:12px; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inherit;" />
       </div>
       <div id="previewArea" style="margin-top:14px;"></div>
     </section>
@@ -273,6 +287,11 @@ cameraInput.addEventListener('change', async (ev) => {
       state.inventory.unshift(res.item);
       status.innerHTML = 'Upload complete. Report ready.';
       // Re-render dashboard and wallet
+      // Fetch fresh stats from server to update wallet totals & counts
+      try {
+        const s = await api.getStats();
+        if (s && s.ok) state.stats = s;
+      } catch (e) { /* ignore stats refresh error */ }
       renderDashboard();
       // Open report modal for the freshly uploaded item
       openReportModal(res.item);
@@ -308,12 +327,20 @@ async function bootstrap() {
     try { state.user = JSON.parse(stored); loginBtn.textContent = `Hi ${state.user.username}`; } catch(e){ /* ignore */ }
   }
 
-  // load inventory from server
+  // load inventory from server (port 5000)
   try {
     const res = await api.getInventory();
-    if (res.ok) state.inventory = res.inventory || [];
+    if (res && res.ok) state.inventory = res.inventory || [];
   } catch (err) {
     console.warn('Could not fetch inventory', err);
+  }
+
+  // load unified stats from server (port 5000)
+  try {
+    const s = await api.getStats();
+    if (s && s.ok) state.stats = s;
+  } catch (err) {
+    console.warn('Could not fetch stats', err);
   }
 
   // initial render based on hash
@@ -328,4 +355,35 @@ bootstrap();
    ------------------------- */
 function escapeHtml(s) {
   if (!s) return '';
-  return String(s).replace(/[&<>\
+  return String(s).replace(/[&<>\"']/g, function (c) {
+    return ({ '&': '&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'": '&#39;' })[c];
+  });
+}
+
+function updateStatsUI() {
+  // state.stats structure: { ok: true, stats: { inventorySize, categoryCounts, wallet } }
+  if (!state.stats || !state.stats.stats) return;
+  const stats = state.stats.stats;
+  // inventory size
+  const totalEl = document.getElementById('totalCardsValue');
+  if (totalEl) totalEl.textContent = stats.inventorySize != null ? String(stats.inventorySize) : String(state.inventory.length);
+  // wallet total
+  const walletEl = document.getElementById('walletValue');
+  if (walletEl) walletEl.textContent = `$${(stats.wallet && stats.wallet.totalValue ? stats.wallet.totalValue.toFixed(2) : 0.00)}`;
+  // category badges
+  const badges = document.getElementById('categoryBadges');
+  if (badges) {
+    badges.innerHTML = '';
+    const cc = stats.categoryCounts || {};
+    Object.keys(cc).forEach(k => {
+      const b = document.createElement('div');
+      b.className = 'badge';
+      b.textContent = `${k}: ${cc[k]}`;
+      badges.appendChild(b);
+    });
+  }
+  // pending uploads (keep placeholder behavior)
+  const pendingEl = document.getElementById('pendingUploadsValue');
+  if (pendingEl) pendingEl.textContent = '0';
+}
+
