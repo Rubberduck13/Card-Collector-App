@@ -1,3 +1,13 @@
-    inventory.unshift(item);
-    runtimeDb.inventory = inventory;
-    saveDataVault(runtimeDb);
+/**
+ * services/attribute_parser.js
+ * Advanced Card Attribute Extraction Engine
+ * 
+ * INSTRUCTIONS FOR COPILOT: 
+ * Build a robust text parser that scans extracted OCR raw card text lines.
+ * It must use comprehensive regular expressions to identify and isolate:
+ * 1. Card Year: Match 4-digit years (e.g., 1986, 2024) specifically framing sport seasons.
+ * 2. Card Number: Extract sequence markers matching patterns like #12, No. 4, or isolated digits near borders.
+ * 3. Premium Attributes: Flag boolean values if string includes 'Auto', 'Autograph', 'Patch', 'Refractor', 'Prizm', or '1/1'.
+ * 
+ * Ensure defensive guard clauses handle empty or corrupt input strings cleanly.
+ */
