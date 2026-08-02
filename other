@@ -1,149 +1,145 @@
-/**
- * services/attribute_parser.js
- * Card attribute extraction with robust year detection per spec.
- * 
- * - Finds 4-digit years (1940..2027)
- * - Expands 2-digit shorthand with leading apostrophe or slash ('96, /03) using a strict window:
- *      yy >= 40 -> 1900 + yy, else -> 2000 + yy
- * - Handles season forms like 1999-00 -> extracts 1999
- * - Returns deduped, sorted years array in the final object.
- */
-
-function toLines(input) {
-  if (!input) return [];
-  if (Array.isArray(input)) return input.map(l => (l || '').toString()).filter(Boolean);
-  return input.toString().split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+cat << 'EOF' > services/storage_engine.js
+const fs = require('fs');
+const path = require('path');
+const dbDir = path.join(__dirname, '..', 'data');
+const dbPath = path.join(dbDir, 'database.json');
+function ensureDB() {
+  try {
+    if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+    if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({ inventory: [], categoryCounts: {} }, null, 2), 'utf8');
+  } catch (err) { throw err; }
 }
-
-function expandTwoDigitYear(twoDigitStr) {
-  const n = parseInt(twoDigitStr, 10);
-  if (Number.isNaN(n)) return null;
-  return n >= 40 ? 1900 + n : 2000 + n;
+function readDB() {
+  ensureDB();
+  try {
+    const raw = fs.readFileSync(dbPath, 'utf8');
+    if (!raw) return { inventory: [], categoryCounts: {} };
+    return JSON.parse(raw);
+  } catch (err) {
+    const fallback = { inventory: [], categoryCounts: {} };
+    try { fs.writeFileSync(dbPath, JSON.stringify(fallback, null, 2), 'utf8'); } catch(e) {}
+    return fallback;
+  }
 }
+function writeDB(db) { ensureDB(); fs.writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf8'); }
+async function getAllCards() { return readDB().inventory || []; }
+async function saveCard(item) {
+  if (!item) throw new Error('item required');
+  const db = readDB();
+  db.inventory = db.inventory || [];
+  db.inventory.unshift(item);
+  const key = (item.category && typeof item.category === 'string') ? item.category.toUpperCase() : 'UNKNOWN';
+  db.categoryCounts = db.categoryCounts || {};
+  db.categoryCounts[key] = (db.categoryCounts[key] || 0) + 1;
+  writeDB(db);
+  return item;
+}
+module.exports = { getAllCards, saveCard, readDB, writeDB };
+EOF
 
-function parseAttributes(raw) {
-  const lines = toLines(raw);
-  const fullText = lines.join('\n') || '';
-  if (!fullText.trim()) {
-    return {
-      years: [],
-      cardNumbers: [],
-      premium: { auto: false, autograph: false, patch: false, refractor: false, prizm: false, oneOfOne: false },
-      rawMatches: {}
-    };
+cat << 'EOF' > server.js
+require('dotenv').config();
+const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const multer = require('multer');
+
+const grading = require('./services/grading_engine');
+const classifier = require('./services/classifier_engine');
+const wallet = require('./services/wallet_engine');
+const attributeParser = require('./services/attribute_parser');
+const storage = require('./services/storage_engine');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(morgan('dev'));
+
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+
+const storageDisk = multer.diskStorage({
+  destination: function (req, file, cb) { cb(null, uploadsDir); },
+  filename: function (req, file, cb) {
+    const ts = Date.now();
+    const orig = file.originalname || 'upload';
+    const safe = String(orig).replace(/\s+/g, '_').replace(/[^\w.-]/g, '');
+    cb(null, `${ts}_${safe}`);
   }
+});
+const upload = multer({ storage: storageDisk, limits: { fileSize: 10 * 1024 * 1024 } });
 
-  const MIN_YEAR = 1940;
-  const MAX_YEAR = 2027;
+let inventory = [];
 
-  const yearsSet = new Set();
-  const yearRawMatches = [];
+app.get('/api/health', (req, res) => res.json({ ok: true, env: process.env.NODE_ENV || 'development' }));
 
-  // 1) 4-digit years (19xx, 20xx) limited to MIN_YEAR..MAX_YEAR
-  const year4Regex = /\b(19|20)\d{2}\b/g;
-  let m;
-  while ((m = year4Regex.exec(fullText)) !== null) {
-    const y = parseInt(m[0], 10);
-    if (y >= MIN_YEAR && y <= MAX_YEAR) {
-      yearsSet.add(String(y));
-      yearRawMatches.push(m[0]);
-    }
+app.get('/api/cards', async (req, res) => {
+  try {
+    const cards = await storage.getAllCards();
+    return res.json({ ok: true, cards });
+  } catch (err) {
+    return res.status(500).json({ error: 'could not read cards' });
   }
+});
 
-  // 2) Season style 1999-00 or 1999/00 -> take first 4-digit year
-  const seasonRegex = /\b(19|20)\d{2}[-\/]\d{2}\b/g;
-  while ((m = seasonRegex.exec(fullText)) !== null) {
-    const firstYear = parseInt(m[0].slice(0, 4), 10);
-    if (firstYear >= MIN_YEAR && firstYear <= MAX_YEAR) {
-      yearsSet.add(String(firstYear));
-      yearRawMatches.push(m[0]);
-    }
-  }
+app.post('/api/grade', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Image file is required' });
+    const opts = {};
+    const ts = Date.now();
+    const orig = req.file.originalname || 'upload';
+    const safe = String(orig).replace(/\s+/g, '_').replace(/[^\w.-]/g, '');
+    const filename = `${ts}_${safe}`;
+    const filePath = path.join(uploadsDir, filename);
+    await fs.promises.writeFile(filePath, req.file.buffer || fs.readFileSync(req.file.path));
 
-  // 3) Two-digit shorthand with leading apostrophe or slash: '96, `96, /03
-  const twoDigitShortRegex = /(?:['\u2019\/])\s*(\d{2})\b/g;
-  while ((m = twoDigitShortRegex.exec(fullText)) !== null) {
-    const yy = m[1];
-    const expanded = expandTwoDigitYear(yy);
-    if (expanded && expanded >= MIN_YEAR && expanded <= MAX_YEAR) {
-      yearsSet.add(String(expanded));
-      yearRawMatches.push(m[0]);
-    }
-  }
+    let classification = 'UNKNOWN';
+    try { classification = await classifier.classifyBuffer(req.file.buffer || fs.readFileSync(filePath), { filename }); } catch (err) {}
 
-  // 4) Two-digit season style e.g., 03-04 or 99/00 -> interpret first pair as shorthand
-  const twoDigitSeasonRegex = /\b(\d{2})[-\/](\d{2})\b/g;
-  while ((m = twoDigitSeasonRegex.exec(fullText)) !== null) {
-    const first = m[1];
-    const expanded = expandTwoDigitYear(first);
-    if (expanded && expanded >= MIN_YEAR && expanded <= MAX_YEAR) {
-      yearsSet.add(String(expanded));
-      yearRawMatches.push(m[0]);
-    }
-  }
+    const report = await grading.gradeBuffer(req.file.buffer || fs.readFileSync(filePath), opts);
 
-  // Card number extraction (kept robust)
-  const cardNumbers = new Set();
-  const numberRawMatches = [];
-
-  const hashRegex = /#\s*(\d{1,4})\b/g;
-  while ((m = hashRegex.exec(fullText)) !== null) { numberRawMatches.push(m[0]); }
-
-  const noRegex = /\bNo\.?[:\s]*?(\d{1,4})\b/gi;
-  while ((m = noRegex.exec(fullText)) !== null) { numberRawMatches.push(m[0]); }
-
-  const labeledNumberRegex = /\b(?:Card|Number|Num|Nr)[:\s]*?(\d{1,4})\b/gi;
-  while ((m = labeledNumberRegex.exec(fullText)) !== null) { numberRawMatches.push(m[0]); }
-
-  const slashNumRegex = /\b(\d{1,4})\s*[\/]\s*(\d{1,4})\b/g;
-  while ((m = slashNumRegex.exec(fullText)) !== null) { numberRawMatches.push(m[0]); }
-
-  const ofNumRegex = /\b(\d{1,4})\s+(?:of|OF)\s+(\d{1,4})\b/g;
-  while ((m = ofNumRegex.exec(fullText)) !== null) { numberRawMatches.push(m[0]); }
-
-  const isolatedDigitRegex = /\b(\d{1,4})\b/g;
-  for (const line of lines) {
-    if (line.length < 30 || /\b(?:card|no\.?|number|num)\b/i.test(line)) {
-      let lm;
-      while ((lm = isolatedDigitRegex.exec(line)) !== null) {
-        const val = lm[1];
-        if (/^(19|20)\d{2}$/.test(val)) continue; // skip years
-        cardNumbers.add(String(parseInt(val, 10)));
-        numberRawMatches.push(lm[0]);
+    let parsedAttrs = {};
+    try {
+      const textToParse = (report && (report.fullText || report.text)) || req.body.name || '';
+      if (textToParse && String(textToParse).trim()) {
+        parsedAttrs = attributeParser.parseAttributes(textToParse);
       }
-    }
+    } catch (err) { parsedAttrs = {}; }
+
+    const item = {
+      id: String(Date.now()),
+      name: req.body.name || safe || 'Untitled Card',
+      imagePath: `/uploads/${filename}`,
+      category: classification,
+      gradingReport: report,
+      parsedAttributes: parsedAttrs,
+      createdAt: new Date().toISOString()
+    };
+
+    inventory.unshift(item);
+    try { await storage.saveCard(item); } catch (err) {}
+
+    return res.json({ ok: true, item });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'grading failed' });
   }
+});
 
-  // Premium flags
-  const premiumKeywords = {
-    auto: [/\bauto(?:graph[ed]?)?s?\b/i, /\bautograph\b/i],
-    autograph: [/\bautograph\b/i, /\bautographed\b/i],
-    patch: [/\bpatch\b/i, /\bpatches\b/i],
-    refractor: [/\brefractor\b/i, /\brefractors\b/i],
-    prizm: [/\bprizm\b/i, /\bprizms\b/i],
-    oneOfOne: [/\b1\s*[\/]\s*1\b/i, /\b1\s+of\s+1\b/i, /\b1of1\b/i]
-  };
+app.use('/uploads', express.static(uploadsDir));
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'API route not found' });
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
-  const premium = { auto: false, autograph: false, patch: false, refractor: false, prizm: false, oneOfOne: false };
-  for (const key of Object.keys(premiumKeywords)) {
-    const patterns = premiumKeywords[key];
-    for (const pat of patterns) {
-      if (pat.test(fullText)) { premium[key] = true; break; }
-    }
-  }
+app.listen(PORT, () => console.log(`Phase 1 server running on http://localhost:${PORT}`));
+EOF
 
-  // Finalize years: dedupe and sort numeric ascending
-  const yearsArr = Array.from(yearsSet).map(s => parseInt(s, 10)).filter(y => !isNaN(y)).sort((a, b) => a - b);
-
-  return {
-    years: yearsArr,
-    cardNumbers: Array.from(cardNumbers),
-    premium,
-    rawMatches: {
-      yearMatches: yearRawMatches,
-      numberMatches: numberRawMatches
-    }
-  };
-}
-
-module.exports = { parseAttributes };
+npm install
+node server.js
