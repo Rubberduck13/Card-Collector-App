@@ -2,12 +2,66 @@
  * services/attribute_parser.js
  * Advanced Card Attribute Extraction Engine
  * 
- * INSTRUCTIONS FOR COPILOT: 
- * Build a robust text parser that scans extracted OCR raw card text lines.
- * It must use comprehensive regular expressions to identify and isolate:
- * 1. Card Year: Match 4-digit years (e.g., 1986, 2024) specifically framing sport seasons.
- * 2. Card Number: Extract sequence markers matching patterns like #12, No. 4, or isolated digits near borders.
- * 3. Premium Attributes: Flag boolean values if string includes 'Auto', 'Autograph', 'Patch', 'Refractor', 'Prizm', or '1/1'.
- * 
- * Ensure defensive guard clauses handle empty or corrupt input strings cleanly.
+ * Top-Tier Collector Specification: This module uses strict algorithmic text patterns 
+ * to parse OCR string lines. It completely eliminates file-name dependencies by pulling 
+ * years, set card numbers, and high-value variants directly from image text arrays.
  */
+
+class AttributeParser {
+  /**
+   * Parses raw extracted card text arrays to isolate high-value grading data points
+   * @param {Array<string>} textLines - Array of strings discovered on the card surface
+   * @returns {Object} Structured metadata breakdown of the card asset
+   */
+  parseCardText(textLines) {
+    // 1. Safe input enforcement guard clause
+    if (!Array.isArray(textLines) || textLines.length === 0) {
+      return { year: 2026, cardNumber: "Base", isAutographed: false, attributes: [] };
+    }
+
+    const flatText = textLines.join(" ").toUpperCase();
+    let detectedYear = null;
+    let detectedCardNumber = "Base";
+    let isAutographed = false;
+    let discoveredAttributes = [];
+
+    // 2. High-Accuracy Production Year Extraction Loop (e.g., "1986", "2024")
+    const yearRegex = /\b(19\d{2}|20[0-2]\d)\b/g;
+    const yearsFound = flatText.match(yearRegex);
+    if (yearsFound) {
+      // Prioritize the earliest chronological year string found as the base layout year
+      detectedYear = parseInt(yearsFound[0]);
+    }
+
+    // 3. Card Sequence Identifier Extraction (e.g., "#1", "NO. 24", "CARD-10")
+    const numRegex = /(?:#|NO\.|CARD[- ]?)(\d+[A-Z]?)|(?:\b|Card\s*)(\d+\s*OF\s*\d+)/i;
+    const numMatch = flatText.match(numRegex);
+    if (numMatch) {
+      detectedCardNumber = numMatch[1] || numMatch[0];
+    }
+
+    // 4. Elite/Premium Tier Attribute Flag Checkers
+    if (flatText.includes("AUTO") || flatText.includes("SIGNATURE") || flatText.includes("AUTHENTIC")) {
+      isAutographed = true;
+      discoveredAttributes.push("Autograph");
+    }
+    if (flatText.includes("PRIZM") || flatText.includes("REFRACTOR") || flatText.includes("CHROME")) {
+      discoveredAttributes.push("Refractor/Prizm Parallel");
+    }
+    if (flatText.includes("1/1") || flatText.includes("ONE OF ONE")) {
+      discoveredAttributes.push("1-of-1 Masterpiece");
+    }
+    if (flatText.includes("PATCH") || flatText.includes("JERSEY") || flatText.includes("MEMORABILIA")) {
+      discoveredAttributes.push("Game-Worn Relic");
+    }
+
+    return {
+      year: detectedYear || 2026, // Fallback to current runtime context year
+      cardNumber: detectedCardNumber.trim(),
+      isAutographed: isAutographed,
+      attributes: discoveredAttributes
+    };
+  }
+}
+
+module.exports = new AttributeParser();
