@@ -1,36 +1,8 @@
-function parseAttributes(fullText) {
-  const cardNumbers = new Set();
-  const rawNumberMatches = [];
+Please look at my entire project workspace and resolve all file connection errors. Specifically, sync server.js so that all require imports at the top match the variable names used inside the file. 
 
-  // Match isolated small tokens on short or contextual lines
-  const isolatedDigitRegex = /\b(\d{1,4})\b/g;
-  
-  // Premium attributes matching rules
-  const premiumKeywords = { 
-    auto: [/bauto(?:graph|graphed)s?\b/i, /bautograph\b/i, /bautographed\b/i], 
-    patch: [/bpatch\b/i, /bpatches\b/i], 
-    refractor: [/brefractor\b/i, /brefractors\b/i], 
-    prizm: [/bprizm\b/i, /bprizms\b/i], 
-    oneOfOne: [/\b1\s*\/\s*1\b/, /\b1\s+of\s+1\b/, /\b1of1\b/ ] 
-  };
-  
-  const premium = { auto: false, autograph: false, patch: false, refractor: false, prizm: false, oneOfOne: false }; 
-  
-  for (const key of Object.keys(premiumKeywords)) { 
-    for (const pat of premiumKeywords[key]) { 
-      if (pat.test(fullText)) { 
-        premium[key] = true; 
-        break; 
-      } 
-    } 
-  }
+1. Ensure 'attributeParser' / 'attribute_parser' matches line 225 and correctly points to the file in the services folder.
+2. Ensure 'walletEngine' / 'wallet_engine' matches line 230 and correctly links to the wallet_engine.js file.
+3. Validate that all variables like 'safeName' use consistent capitalization throughout server.js.
+4. Keep the working try/catch global route wrapper intact so the server doesn't crash.
 
-  return { 
-    years: [], 
-    cardNumbers: Array.from(cardNumbers), 
-    premium, 
-    rawMatches: { yearMatches: [], numberMatches: rawNumberMatches } 
-  };
-}
-
-module.exports = { parseAttributes };
+Provide the fully updated code files so they work together seamlessly.
