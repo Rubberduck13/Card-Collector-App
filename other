@@ -1,7 +1,1 @@
-  res.json({ ok: true, item });
-  
-  } catch (globalErr) {
-    console.error('Global route error:', globalErr);
-    res.status(500).json({ ok: false, error: 'Internal server error' });
-  }
-});
+return { years: [], cardNumbers: Array.from(cardNumbers), premium, rawMatches: { yearMatches: [], numberMatches: rawNumberMatches } };
