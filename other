@@ -1,1 +1,16 @@
-Look at my wallet_engine.js file and how it is called inside server.js. I want to update the pricing calculator so that if the attribute parser detects premium attributes, it applies a valuation bonus. For example, if isAutographed is true, add a 50% price bonus to the card value. If the card attributes contain 'oneOfOne', multiply the final valuation by 10.
+class WalletEngine {
+  constructor() {
+    this.valueForItem = valueForItem;
+    this.portfolioStats = portfolioStats;
+  }
+  
+  pricingReport(config) {
+    const baseline = this.valueForItem({
+      gradingReport: { grade: config.numericGrade },
+      name: config.cardName
+    });
+    return { finalValuation: baseline };
+  }
+}
+
+module.exports = new WalletEngine();
