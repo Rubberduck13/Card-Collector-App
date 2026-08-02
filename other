@@ -1,14 +1,3 @@
-    // Build inventory item
-    const priceReport = walletEngine.pricingReport({
-      cardName: req.body.name || safename || "",
-      numericGrade: report.grade || 5
-    });
-
-    const item = {
-      id:            String(ts),
-      name:          req.body.name || safename || 'Untitled Card',
-      imagePath:     `/uploads/${filename}`,
-      gradingReport: report,
-      createdAt:     new Date().toISOString(),
-      valuation:     priceReport.finalValuation,
-    };
+    inventory.unshift(item);
+    runtimeDb.inventory = inventory;
+    saveDataVault(runtimeDb);
