@@ -1,54 +1,7 @@
-  // ... Strip optional data-URL prefix (data:image/jpeg;base64,)
-  const base64 = raw.includes(',') ? raw.split(',')[1] : raw;
-
-  // -- Run the grading engines --
-  const report = await grading.analyzeImageBuffer(base64);
-
-  // -- Persist image to uploads dir so the UI can display a thumbnail --
-  const ts = Date.now();
-  const safeName = String(req.body.name || 'card')
-    .replace(/\s+/g, '_')
-    .replace(/[^a-zA-Z0-9_-]/g, '')
-    .slice(0, 80);
-  const filename = `${ts}_${safeName}.jpg`;
-  const filePath = path.join(uploadsDir, filename);
-  await fs.promises.writeFile(filePath, Buffer.from(base64, 'base64'));
-
-  // 1. Invoke Copilot's advanced attribute parser engine matching its export shape
-  const parsedData = attributeParser.parseAttributes(req.body.name || safeName || "");
-
-  // 2. Compute dynamic market pricing matching your existing calculator setup
-  const priceReport = walletEngine.pricingReport({
-    cardName: req.body.name || safeName || "",
-    numericGrade: report.grade || 5
-  });
-
-  // 3. Assemble the updated inventory item object with Copilot's extracted properties
-  const item = {
-    id: String(ts),
-    name: req.body.name || safeName || 'Untitled Card',
-    imagePath: `/uploads/${filename}`,
-    gradingReport: report,
-    createdAt: new Date().toISOString(),
-    valuation: priceReport.finalValuation,
-
-    // Map safely to Copilot's specific structural output shape arrays and booleans
-    year: Array.isArray(parsedData.years) && parsedData.years.length > 0 ? parsedData.years[0] : 2026,
-    cardNumber: Array.isArray(parsedData.cardNumbers) && parsedData.cardNumbers.length > 0 ? parsedData.cardNumbers[0] : "Base",
-    isAutographed: parsedData.premium ? parsedData.premium.auto : false,
-    attributes: parsedData.premium ? Object.keys(parsedData.premium).filter(key => parsedData.premium[key] === true) : []
-  };
-
-  inventory.unshift(item);
-  runtimeDb.inventory = inventory;
-  saveDataVault(runtimeDb);
-
-  // Persist to JSON DB (best-effort)
-  try {
-    await storage.saveCard(item);
-  } catch (err) {
-    console.error('Failed to save card to JSON DB', err);
-  }
-
   res.json({ ok: true, item });
+  
+  } catch (globalErr) {
+    console.error('Global route error:', globalErr);
+    res.status(500).json({ ok: false, error: 'Internal server error' });
+  }
 });
