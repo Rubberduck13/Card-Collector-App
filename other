@@ -1,8 +1,9 @@
-Please look at my entire project workspace and resolve all file connection errors. Specifically, sync server.js so that all require imports at the top match the variable names used inside the file. 
+Look at my `services/attribute_parser.js` file. Right now, the `years` array logic is entirely skipped and hardcoded to return an empty array `[]`. 
 
-1. Ensure 'attributeParser' / 'attribute_parser' matches line 225 and correctly points to the file in the services folder.
-2. Ensure 'walletEngine' / 'wallet_engine' matches line 230 and correctly links to the wallet_engine.js file.
-3. Validate that all variables like 'safeName' use consistent capitalization throughout server.js.
-4. Keep the working try/catch global route wrapper intact so the server doesn't crash.
+Please implement a robust year extraction system inside this function:
+1. Use a regular expression to look for 4-digit years (like 1986, 2003, 2024, etc.) within the incoming `fullText`.
+2. Ensure it only captures realistic sports card years (for example, years between 1940 and 2027).
+3. If a 2-digit year format is found with a leading apostrophe or slash (like '96 or '03), safely convert it to its full 4-digit counterpart (1996 or 2003).
+4. Dedup the results so the same year isn't returned twice, and return them cleanly inside the `years` array in the final object.
 
-Provide the fully updated code files so they work together seamlessly.
+Provide the fully updated, self-contained `attribute_parser.js` code.
