@@ -1,1 +1,27 @@
-loginBtn.textContent = `👤 ${state.user.username}`;
+// ========================================================================
+// 💾 DATABASE PERSISTENCE STORAGE LAYER
+// ========================================================================
+const DB_FILE = path.join(__dirname, 'database_vault.json');
+
+function loadDataVault() {
+  try {
+    if (!fs.existsSync(DB_FILE)) {
+      fs.writeFileSync(DB_FILE, JSON.stringify({ users: {}, inventories: {} }, null, 2));
+    }
+    return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+  } catch (err) {
+    console.error("[Database Error] Failed to read disk storage vault:", err);
+    return { users: {}, inventories: {} };
+  }
+}
+
+function saveDataVault(currentDataState) {
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(currentDataState, null, 2));
+  } catch (err) {
+    console.error("[Database Error] Failed to write updates to disk vault:", err);
+  }
+}
+
+// Initialize our dynamic storage structure in memory
+let runtimeDb = loadDataVault();
