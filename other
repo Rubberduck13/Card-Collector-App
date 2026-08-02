@@ -1,4 +1,1 @@
-  console.log("Raw text sent to parser:", report.fullText || report.text || req.body.name);
-  const parsedData = attributeParser.parseAttributes(
-    report.fullText || report.text || req.body.name || ""
-  );
+Look at my wallet_engine.js file and how it is called inside server.js. I want to update the pricing calculator so that if the attribute parser detects premium attributes, it applies a valuation bonus. For example, if isAutographed is true, add a 50% price bonus to the card value. If the card attributes contain 'oneOfOne', multiply the final valuation by 10.
