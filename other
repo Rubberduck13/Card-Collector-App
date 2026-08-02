@@ -1,24 +1,7 @@
-    // 1. Invoke Copilot's advanced attribute parser engine matching its export shape
-    const parsedData = attributeParser.parseAttributes(req.body.name || safename || "");
+    } catch (err) {
+        console.error('Failed to save card to JSON DB', err);
+    }
+  }; // <-- Closes the buildStatsPayload helper function
 
-    // 2. Compute dynamic market pricing matching your existing calculator setup
-    const priceReport = walletEngine.pricingReport({
-      cardName: req.body.name || safename || "",
-      numericGrade: report.grade || 5
-    });
-
-    // 3. Assemble the updated inventory item object with Copilot's extracted properties
-    const item = {
-      id:            String(ts),
-      name:          req.body.name || safename || 'Untitled Card',
-      imagePath:     `/uploads/${filename}`,
-      gradingReport: report,
-      createdAt:     new Date().toISOString(),
-      valuation:     priceReport.finalValuation,
-      
-      // Map safely to Copilot's specific structural output shape arrays and booleans
-      year:          Array.isArray(parsedData.years) && parsedData.years.length > 0 ? parsedData.years[0] : 2026,
-      cardNumber:    Array.isArray(parsedData.cardNumbers) && parsedData.cardNumbers.length > 0 ? parsedData.cardNumbers[0] : "Base",
-      isAutographed: parsedData.premium ? parsedData.premium.auto : false,
-      attributes:    parsedData.premium ? Object.keys(parsedData.premium).filter(key => parsedData.premium[key] === true) : []
-    };
+  res.json({ ok: true, item });
+}); // <-- This is where your original }); belongs to close the app.post route!
