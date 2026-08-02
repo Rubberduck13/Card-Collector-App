@@ -1,1 +1,3 @@
-let inventory = runtimeDb.inventory || []; // Automatically pulls saved records from disk vault
+    // Sync the runtime schema state and save directly to disk
+    runtimeDb.inventory = inventory;
+    saveDataVault(runtimeDb);
