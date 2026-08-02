@@ -1,11 +1,4 @@
-Please build out a front-end loading state and an advanced scan results modal:
-
-1. UI Loading Spinner: When the user clicks the "Upload & Grade" button, disable the button immediately and replace its text with an animated loading spinner (e.g., "Analyzing Card and Computing Valuation...").
-2. Interactive Results Modal: Once the backend successfully processes the card, instead of just updating the dashboard silently, pop open a sleek modal window celebrating the new scan.
-3. Modal Details: The modal should prominently display:
-   - The card's thumbnail image.
-   - The final computed numerical Grade (with its sub-attributes like Centering/Corners).
-   - The Wallet Valuation (e.g., "$40.00").
-   - A success confirmation button to dismiss the modal and return to the main dashboard views.
-
-Ensure all front-end scripts match our stable /api/grade endpoint payload structure.
+  console.log("Raw text sent to parser:", report.fullText || report.text || req.body.name);
+  const parsedData = attributeParser.parseAttributes(
+    report.fullText || report.text || req.body.name || ""
+  );
