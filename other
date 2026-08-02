@@ -1,14 +1,13 @@
-    // // Build inventory item
-    // 1. Parse raw text lines to isolate pristine card data
-    const extractedAttributes = attributeParser.parseCardText([req.body.name || safename]);
+    // 1. Invoke Copilot's advanced attribute parser engine matching its export shape
+    const parsedData = attributeParser.parseAttributes(req.body.name || safename || "");
 
-    // 2. Compute dynamic market pricing using the newly parsed text report properties
+    // 2. Compute dynamic market pricing matching your existing calculator setup
     const priceReport = walletEngine.pricingReport({
       cardName: req.body.name || safename || "",
       numericGrade: report.grade || 5
     });
 
-    // 3. Assemble the comprehensive top-tier asset record object
+    // 3. Assemble the updated inventory item object with Copilot's extracted properties
     const item = {
       id:            String(ts),
       name:          req.body.name || safename || 'Untitled Card',
@@ -17,9 +16,9 @@
       createdAt:     new Date().toISOString(),
       valuation:     priceReport.finalValuation,
       
-      // ✨ Elite Feature: Attach structural hardware tracking properties!
-      year:          extractedAttributes.year,
-      cardNumber:    extractedAttributes.cardNumber,
-      isAutographed: extractedAttributes.isAutographed,
-      attributes:    extractedAttributes.attributes
+      // Map safely to Copilot's specific structural output shape arrays and booleans
+      year:          Array.isArray(parsedData.years) && parsedData.years.length > 0 ? parsedData.years[0] : 2026,
+      cardNumber:    Array.isArray(parsedData.cardNumbers) && parsedData.cardNumbers.length > 0 ? parsedData.cardNumbers[0] : "Base",
+      isAutographed: parsedData.premium ? parsedData.premium.auto : false,
+      attributes:    parsedData.premium ? Object.keys(parsedData.premium).filter(key => parsedData.premium[key] === true) : []
     };
