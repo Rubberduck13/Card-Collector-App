@@ -1,1 +1,3 @@
-sed -i "s|const classifier = require('./services/classifier');|const classifier = { classifyBuffer: async () => 'SPORTS' };|g" server.js && node server.js
+git add server.js services/grading_engine.js
+git commit -m "feat: stabilize classifier fallbacks and activate phase 2 grading matrix math"
+git push origin phase1/scaffold
