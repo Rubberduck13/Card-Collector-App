@@ -1,9 +1,11 @@
-Look at my `services/attribute_parser.js` file. Right now, the `years` array logic is entirely skipped and hardcoded to return an empty array `[]`. 
+Please build out a front-end loading state and an advanced scan results modal:
 
-Please implement a robust year extraction system inside this function:
-1. Use a regular expression to look for 4-digit years (like 1986, 2003, 2024, etc.) within the incoming `fullText`.
-2. Ensure it only captures realistic sports card years (for example, years between 1940 and 2027).
-3. If a 2-digit year format is found with a leading apostrophe or slash (like '96 or '03), safely convert it to its full 4-digit counterpart (1996 or 2003).
-4. Dedup the results so the same year isn't returned twice, and return them cleanly inside the `years` array in the final object.
+1. UI Loading Spinner: When the user clicks the "Upload & Grade" button, disable the button immediately and replace its text with an animated loading spinner (e.g., "Analyzing Card and Computing Valuation...").
+2. Interactive Results Modal: Once the backend successfully processes the card, instead of just updating the dashboard silently, pop open a sleek modal window celebrating the new scan.
+3. Modal Details: The modal should prominently display:
+   - The card's thumbnail image.
+   - The final computed numerical Grade (with its sub-attributes like Centering/Corners).
+   - The Wallet Valuation (e.g., "$40.00").
+   - A success confirmation button to dismiss the modal and return to the main dashboard views.
 
-Provide the fully updated, self-contained `attribute_parser.js` code.
+Ensure all front-end scripts match our stable /api/grade endpoint payload structure.
