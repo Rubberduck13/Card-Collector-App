@@ -1,7 +1,10 @@
-    } catch (err) {
-        console.error('Failed to save card to JSON DB', err);
-    }
-  }; // <-- Closes the buildStatsPayload helper function
+// Persist to JSON DB (best-effort)
+try {
+    await storage.saveCard(item);
+} catch (err) {
+    console.error('Failed to save card to JSON DB', err);
+}
 
-  res.json({ ok: true, item });
-}); // <-- This is where your original }); belongs to close the app.post route!
+res.json({ ok: true, item });
+// If this is the absolute end of the app.post route, add the closing block below:
+}); 
