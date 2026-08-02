@@ -1,16 +1,8 @@
-class WalletEngine {
-  constructor() {
-    this.valueForItem = valueForItem;
-    this.portfolioStats = portfolioStats;
-  }
-  
-  pricingReport(config) {
-    const baseline = this.valueForItem({
-      gradingReport: { grade: config.numericGrade },
-      name: config.cardName
-    });
-    return { finalValuation: baseline };
-  }
-}
+Please analyze my entire workspace. I need a complete, automated synchronization pass across all files so I can stop manual troubleshooting:
 
-module.exports = new WalletEngine();
+1. Update `services/wallet_engine.js` with the new premium valuation multipliers (50% for autographs, 10x for 1-of-1s). 
+2. Ensure that its final `module.exports` matches exactly how `server.js` expects to call it (reconcile class-based instance export vs object function exports).
+3. Verify that `server.js` correctly hooks into `services/attribute_parser.js` and passes `report.fullText` so the year detector works.
+4. Auto-fix any trailing brackets, syntax typos, or lowercase/camelCase variable mismatches across the files.
+
+Do not give me snippets. Please apply the changes directly to the files or provide the final, fully-synced file contents so everything connects seamlessly out of the box.
