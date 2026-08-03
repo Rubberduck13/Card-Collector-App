@@ -1,4 +1,3 @@
-cat << 'EOF' > business_plan.md
 # THE JUDGE — CORE PROTOCOL & SPECIFICATION MANIFESTO
 ## Strategic Vision, Autonomous Diagnostic Framework, & Global Valuation Architecture
 
