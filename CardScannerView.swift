@@ -106,7 +106,7 @@ struct CardScannerView: View {
                     HStack(spacing: 4) {
                         ForEach(ScanningPhase.allCases, id: \.self) { phase in
                             Rectangle()
-                                .fill(phase == currentPhase ? Color.blue : (ScanningPhase.allCases.firstIndex(of: phase)! < ScanningPhase.allCases.firstIndex(of: currentPhase)! ? Color.green : Color.gray.opacity(0.3)))
+                                .fill(phase == currentPhase ? Color.blue : (ScanningPhase.allCases.firstIndex(of: phase)! < ScanningPhase.allCases.firstIndex(of: currentPhase)! ? Color.green : Color.gray))
                                 .frame(height: 5)
                         }
                     }
@@ -183,18 +183,18 @@ struct CardScannerView: View {
                     VStack(spacing: 12) {
                         Image(systemName: "lock.shield.fill").font(.largeTitle).foregroundColor(.blue)
                         Text("Analytics Vault Encrypted").font(.headline)
-                        Button("Verify Biometrics") { securityVault.authenticateCollectorVault() }.bold().foregroundColor(.white).padding().frame(maxWidth: .infinity).background(Color.blue).cornerRadius(8).padding(.horizontal)
+                        Button("Verify Biometrics") { securityVault.authenticateCollectorVault() }.bold().foregroundColor(.white).padding().frame(maxWidth: .infinity).background(Color.blue).cornerRadius(10)
                     }.padding(.top, 40)
                 } else {
                     HStack(spacing: 15) {
-                        VStack(alignment: .leading) { Text("NET WORTH").font(.caption2).bold().foregroundColor(.secondary); Text(String(format: "$%.2f", portfolio.totalPortfolioValue)).font(.title2).bold().foregroundColor(.blue) }.frame(maxWidth: .infinity, alignment: .leading).padding().background(Color(.secondarySystemBackground)).cornerRadius(10)
-                        VStack(alignment: .leading) { Text("VAULT COUNT").font(.caption2).bold().foregroundColor(.secondary); Text(String(format: "%d Cards", portfolio.savedCards.count)).font(.title2).bold().foregroundColor(.purple) }.frame(maxWidth: .infinity, alignment: .leading).padding().background(Color(.secondarySystemBackground)).cornerRadius(10)
+                        VStack(alignment: .leading) { Text("NET WORTH").font(.caption2).bold().foregroundColor(.secondary); Text(String(format: "$%.2f", portfolio.totalPortfolioValue)).font(.title).bold().foregroundColor(.green) }
+                        VStack(alignment: .leading) { Text("VAULT COUNT").font(.caption2).bold().foregroundColor(.secondary); Text(String(format: "%d Cards", portfolio.savedCards.count)).font(.title).bold().foregroundColor(.blue) }
                     }.padding([.horizontal, .top])
                     if portfolio.totalPortfolioValue > 0 {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
                                 // FIXED: Replaced standard Swift Chart layout blocks with precise dashboard layout cards to bypass generic parameter inference blocks completely
-                                ForEach(portfolio.historicalTrendSnapshots.suffix(5), id: .timestamp) { snapshot in
+                                ForEach(portfolio.historicalTrendSnapshots.suffix(5), id: \.timestamp) { snapshot in
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text("Snapshot Check").font(.system(size: 8, weight: .bold)).foregroundColor(.secondary)
                                         Text(String(format: "$%.2f", snapshot.portfolioValue)).font(.subheadline).bold().foregroundColor(.blue)
@@ -211,7 +211,7 @@ struct CardScannerView: View {
                                 HStack {
                                     VStack(alignment: .leading) { Text(card.name).font(.subheadline).bold().foregroundColor(.primary); Text(card.setName).font(.caption).foregroundColor(.secondary) }
                                     Spacer()
-                                    VStack(alignment: .trailing) { Text(String(format: "$%.2f", card.calculatedValue)).bold().foregroundColor(.green); Text(String(format: "PSA %d", card.predictedGradePSA)).font(.caption2).padding(4).background(Color.blue.opacity(0.1)).cornerRadius(4) }
+                                    VStack(alignment: .trailing) { Text(String(format: "$%.2f", card.calculatedValue)).bold().foregroundColor(.green); Text(String(format: "PSA %d", card.predictedGradePSA)).font(.caption2).foregroundColor(.secondary) }
                                 }
                             }
                             .listRowBackground(Color(.secondarySystemBackground))
@@ -232,10 +232,10 @@ struct CardScannerView: View {
                         ForEach(portfolio.activeSubmissionBatches) { folder in
                             Button(action: { selectedBatchFolderId = folder.id }) {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    HStack { Image(systemName: "folder.fill"); Spacer(); Text(folder.gradingServiceTarget).font(.system(size: 8, weight: .black)).padding(3).background(Color.white.opacity(0.2)).cornerRadius(4) }
+                                    HStack { Image(systemName: "folder.fill"); Spacer(); Text(folder.gradingServiceTarget).font(.system(size: 8, weight: .black)).padding(3).background(Color.white).cornerRadius(3) }
                                     Text(folder.batchName).font(.caption).bold().lineLimit(1)
                                     Text("(portfolio.savedCards.filter { $0.targetBatchId == folder.id }.count) cards").font(.system(size: 9)).opacity(0.8)
-                                }.foregroundColor(selectedBatchFolderId == folder.id ? .white : .primary).padding(12).frame(width: 140, height: 75).background(selectedBatchFolderId == folder.id ? Color.blue : Color(.secondarySystemBackground)).cornerRadius(12)
+                                }.foregroundColor(selectedBatchFolderId == folder.id ? .white : .primary).padding(12).frame(width: 140, height: 75).background(selectedBatchFolderId == folder.id ? Color.blue : Color(.secondarySystemBackground)).cornerRadius(10)
                             }
                         }
                     }.padding()
@@ -251,17 +251,17 @@ struct CardScannerView: View {
                                 Text("SGC").tag("SGC")
                                 Text("TAG").tag("TAG")
                             }.pickerStyle(.menu)
-                            Button(action: { guard !newBatchInputName.isEmpty else { return }; portfolio.createNewSubmissionBatch(name: newBatchInputName, service: newBatchServiceSelection); newBatchInputName = "" }) { Image(systemName: "folder.badge.plus").bold() }
+                            Button(action: { guard !newBatchInputName.isEmpty else { return }; portfolio.createNewSubmissionBatch(name: newBatchInputName, service: newBatchServiceSelection); newBatchInputName = "" }) { Text("Create") }
                         }
                     }
                     Section(header: Text("EXPORT")) {
-                        Button(action: { isBatchExporting = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { isBatchExporting = false; if let url = portfolio.generatePrintableSubmissionManifest() { UIApplication.shared.connectedScenes.flatMap({ ($0 as? UIWindowScene)?.windows ?? [] }).first(where: { $0.isKeyWindow })?.rootViewController?.present(UIActivityViewController(activityItems: [url], applicationActivities: nil), animated: true) } } }) {
+                        Button(action: { isBatchExporting = true; DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { isBatchExporting = false; if let url = portfolio.generatePrintableSubmissionManifest() { UIApplication.shared.connectedScenes.flatMap({ ($0 as? UIWindowScene)?.windows ?? [] }).first(where: { $0.isKeyWindow })?.rootViewController?.present(UIActivityViewController(activityItems: [url], applicationActivities: nil), animated: true, completion: nil) } } }) {
                             if isBatchExporting { ProgressView() } else { Label("Export CSV Sheets", systemImage: "doc.text.below.ecg.fill").bold() }
                         }.disabled(portfolio.savedCards.isEmpty)
                     }
                     Section(header: Text("STAGING MATRIX (LONG-PRESS TO ROUTE)")) {
                         ForEach(batchSegmentedCardRecords) { card in
-                            HStack { Image(systemName: "square.dashed"); VStack(alignment: .leading) { Text(card.name).bold(); Text("PSA (card.predictedGradePSA)").font(.caption2) }; Spacer(); Text(String(format: "$%.2f", card.calculatedValue)).foregroundColor(.green) }
+                            HStack { Image(systemName: "square.dashed"); VStack(alignment: .leading) { Text(card.name).bold(); Text("PSA (card.predictedGradePSA)").font(.caption2) }; Spacer(); Text("...") }
                                 .contextMenu { Menu("Move Folder...") { ForEach(portfolio.activeSubmissionBatches) { dest in Button(dest.batchName) { withAnimation { portfolio.assignCardToBatch(cardId: card.id, batchId: dest.id) } } } } }
                         }
                     }
@@ -309,7 +309,7 @@ struct CardScannerView: View {
             List {
                 Section(header: Text("CHOOSE ASSET")) {
                     ForEach(portfolio.savedCards) { card in
-                        Button(action: { selectedArbitrageCard = card }) { HStack { Text(card.name); Spacer(); if selectedArbitrageCard?.id == card.id { Image(systemName: "dollarsign.circle.fill").foregroundColor(.green) } } }
+                        Button(action: { selectedArbitrageCard = card }) { HStack { Text(card.name); Spacer(); if selectedArbitrageCard?.id == card.id { Image(systemName: "dollarsign.circle.fill") } } }
                     }
                 }
                 if let activeCard = selectedArbitrageCard {
@@ -422,7 +422,7 @@ struct CardScannerView: View {
     }
     @ViewBuilder
     private func ExportManifestButton() -> some View {
-        Button(action: { if let url = portfolio.generatePrintableSubmissionManifest() { UIApplication.shared.connectedScenes.flatMap({ ($0 as? UIWindowScene)?.windows ?? [] }).first(where: { $0.isKeyWindow })?.rootViewController?.present(UIActivityViewController(activityItems: [url], applicationActivities: nil), animated: true) } }) {
+        Button(action: { if let url = portfolio.generatePrintableSubmissionManifest() { UIApplication.shared.connectedScenes.flatMap({ ($0 as? UIWindowScene)?.windows ?? [] }).first(where: { $0.isKeyWindow })?.rootViewController?.present(UIActivityViewController(activityItems: [url], applicationActivities: nil), animated: true, completion: nil) } }) {
             Label("PDF", systemImage: "doc.badge.gearshape.fill").font(.system(size: 9, weight: .bold))
         }
     }
@@ -464,7 +464,7 @@ struct CardScannerView: View {
                     resetCurrentScanState()
                 }
             }) {
-                Label(isSaveConfirmed ? "Saved to Vault Ledger!" : "Commit Scan to Collection Portfolio", systemImage: isSaveConfirmed ? "checkmark.seal.fill" : "folder.badge.plus").bold().frame(maxWidth: .infinity).padding(.vertical, 12).background(isSaveConfirmed ? Color.green : Color.blue).foregroundColor(.white).cornerRadius(8)
+                Label(isSaveConfirmed ? "Saved to Vault Ledger!" : "Commit Scan to Collection Portfolio", systemImage: isSaveConfirmed ? "checkmark.seal.fill" : "folder.badge.plus").bold().frame(maxWidth: .infinity).padding().background(isSaveConfirmed ? Color.green : Color.blue).foregroundColor(.white).cornerRadius(10)
             }.disabled(isSaveConfirmed)
         }
     }
@@ -516,7 +516,8 @@ struct CardScannerView: View {
                 guard let cardRect = recognizedObservation else {
                     Task { @MainActor in if self.isCardDetected { self.isCardDetected = false } }; return
                 }
-                let computedCentering = centeringAnalyzer.analyzeCentering(from: cardRect)
+                // Updated to call the new real centering analyzer and pass the camera frame
+                let computedCentering = centeringAnalyzer.analyzeCenteringReal(from: cardRect, in: imageFrame)
                 let automatedDefects = defectAnalyzer.analyzeCardSurface(from: imageFrame)
                 self.centeringAnalyzer.extractCardIdentifierText(from: imageFrame, cardBoundingBox: cardRect) { foundTextString in
                     Task { @MainActor in
