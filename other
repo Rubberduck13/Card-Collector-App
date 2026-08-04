@@ -1,1 +1,1 @@
-I replaced analyzeCentering with analyzeCenteringReal in CenteringAnalyzer.swift — please update CardScannerView.swift’s processLiveCameraFrame to call the new function and pass it the camera frame image
+The change is pushed now — analyzeCenteringReal is in CenteringAnalyzer.swift. Please update processLiveCameraFrame in CardScannerView.swift to call analyzeCenteringReal(from: cardRect, in: imageFrame) instead of the old analyzeCentering call.
