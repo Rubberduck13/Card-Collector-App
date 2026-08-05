@@ -108,14 +108,14 @@ public class CenteringAnalyzer {
         let topRight = CGPoint(x: observation.topRight.x * extent.width, y: observation.topRight.y * extent.height)
         let bottomLeft = CGPoint(x: observation.bottomLeft.x * extent.width, y: observation.bottomLeft.y * extent.height)
         let bottomRight = CGPoint(x: observation.bottomRight.x * extent.width, y: observation.bottomRight.y * extent.height)
-
+        
         guard let perspectiveFilter = CIFilter(name: "CIPerspectiveCorrection") else { return fallbackCentering() }
         perspectiveFilter.setValue(ciImage, forKey: kCIInputImageKey)
         perspectiveFilter.setValue(CIVector(cgPoint: topLeft), forKey: "inputTopLeft")
         perspectiveFilter.setValue(CIVector(cgPoint: topRight), forKey: "inputTopRight")
         perspectiveFilter.setValue(CIVector(cgPoint: bottomLeft), forKey: "inputBottomLeft")
         perspectiveFilter.setValue(CIVector(cgPoint: bottomRight), forKey: "inputBottomRight")
-
+        
         guard let correctedImage = perspectiveFilter.outputImage else { return fallbackCentering() }
         let context = CIContext()
         guard let correctedCGImage = context.createCGImage(correctedImage, from: correctedImage.extent),
@@ -123,13 +123,13 @@ public class CenteringAnalyzer {
               let buffer = CFDataGetBytePtr(pixelData) else {
             return fallbackCentering()
         }
-
+        
         let width = correctedCGImage.width
         let height = correctedCGImage.height
         let bytesPerPixel = correctedCGImage.bitsPerPixel / 8
         let bytesPerRow = correctedCGImage.bytesPerRow
         let dataLength = CFDataGetLength(pixelData)
-
+        
         func brightness(x: Int, y: Int) -> Int {
             let offset = y * bytesPerRow + x * bytesPerPixel
             guard offset + 2 < dataLength, offset >= 0 else { return 0 }
@@ -138,7 +138,7 @@ public class CenteringAnalyzer {
             let b = Int(buffer[offset + 2])
             return (r + g + b) / 3
         }
-
+        
         func scanLineForBorder(edge: String, lineOffset: Int) -> Int? {
             let scanLength: Int
             switch edge {
@@ -148,7 +148,7 @@ public class CenteringAnalyzer {
             var prevBrightness: Int? = nil
             var maxJump = 0
             var borderWidth: Int? = nil
-
+            
             for i in 0..<scanLength {
                 let currentBrightness: Int
                 switch edge {
@@ -168,40 +168,40 @@ public class CenteringAnalyzer {
             }
             return maxJump > 15 ? borderWidth : nil
         }
-
+        
         func findBorderWidth(edge: String) -> Double {
             let sampleCount = 7
             let dimension = (edge == "left" || edge == "right") ? height : width
             let margin = dimension / 4
             var results: [Int] = []
-
+            
             for sample in 0..<sampleCount {
                 let position = margin + (sample * (dimension - 2 * margin) / (sampleCount - 1))
                 if let w = scanLineForBorder(edge: edge, lineOffset: position) {
                     results.append(w)
                 }
             }
-
+            
             guard !results.isEmpty else { return 12 }
             let sorted = results.sorted()
             return Double(sorted[sorted.count / 2])
         }
-
+        
         let leftBorder = findBorderWidth(edge: "left")
         let rightBorder = findBorderWidth(edge: "right")
         let topBorder = findBorderWidth(edge: "top")
         let bottomBorder = findBorderWidth(edge: "bottom")
-
+        
         let totalH = leftBorder + rightBorder
         let totalV = topBorder + bottomBorder
         let leftPct = totalH > 0 ? (leftBorder / totalH) * 100 : 50
         let rightPct = 100 - leftPct
         let topPct = totalV > 0 ? (topBorder / totalV) * 100 : 50
         let bottomPct = 100 - topPct
-
+        
         let passesPSA10 = leftPct >= 40 && leftPct <= 60 && topPct >= 40 && topPct <= 60
         let passesBGS10 = leftPct >= 48 && leftPct <= 52 && topPct >= 48 && topPct <= 52
-
+        
         return CenteringResult(
             leftRightRatio: (leftPct, rightPct),
             topBottomRatio: (topPct, bottomPct),
@@ -209,7 +209,7 @@ public class CenteringAnalyzer {
             passesBGS10: passesBGS10
         )
     }
-
+    
     private func fallbackCentering() -> CenteringResult {
         CenteringResult(leftRightRatio: (50, 50), topBottomRatio: (50, 50), passesPSA10: true, passesBGS10: true)
     }
