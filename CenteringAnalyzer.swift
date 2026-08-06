@@ -15,10 +15,10 @@ public class CenteringAnalyzer {
     public init() {}
 
     // MARK: - Multi-Frame Averaging State
-    // NEW: rolling buffer of recent single-frame centering readings. Averaging (median)
-    // across several frames is what actually kills the ~10-15% frame-to-frame swing —
-    // a single frame is noisy (lighting flicker, sensor noise, micro-shake); several
-    // frames held over ~1-2 seconds converge on the card's true centering.
+    // Rolling buffer of recent single-frame centering readings. Averaging (median) across
+    // several frames is what actually kills frame-to-frame swing — a single frame is noisy
+    // (lighting flicker, sensor noise, micro-shake); several frames held over ~1-2 seconds
+    // converge on the card's true centering.
     private var recentSamples: [CenteringResult] = []
     private let maxSampleBufferSize = 8
     private let minimumSamplesForStableReading = 4
@@ -27,22 +27,38 @@ public class CenteringAnalyzer {
     // (not just noise) and start the buffer over rather than blending it in.
     private let outlierRejectionThreshold = 20.0
 
+    // FIXED (crash/lockup root cause): the buffer above is written to from the camera's
+    // background Vision-processing thread (via analyzeCenteringAveraged, called from
+    // processLiveCameraFrame's Task) AND cleared from the main thread (resetSampleBuffer,
+    // called on commit/reset). Two threads mutating the same array with no coordination is
+    // a data race — this is almost certainly what caused the intermittent crashes/lockups
+    // after saving to Vault. All access to recentSamples now goes through this serial queue
+    // so reads and writes can never overlap, regardless of which thread calls in.
+    private let bufferAccessQueue = DispatchQueue(label: "com.thejudge.centeringanalyzer.bufferqueue")
+
     /// Call this whenever card detection is lost, the scan phase resets, or a new card
     /// is presented — clears the rolling buffer so old samples don't bleed into a new scan.
     public func resetSampleBuffer() {
-        recentSamples.removeAll()
+        bufferAccessQueue.sync {
+            recentSamples.removeAll()
+        }
     }
 
     /// True once enough consistent samples have accumulated that the averaged reading
-    /// can be trusted (used to gate the "Lock & Advance" button on the front-centering phase).
+    /// can be trusted (used to gate the "Lock & Advance" button / auto-advance on the
+    /// front-centering phase).
     public var isStableReading: Bool {
-        recentSamples.count >= minimumSamplesForStableReading
+        bufferAccessQueue.sync {
+            recentSamples.count >= minimumSamplesForStableReading
+        }
     }
 
     /// How many consistent samples are currently buffered (0...maxSampleBufferSize).
     /// Useful for showing "Hold steady... 3/4" style progress in the UI.
     public var currentSampleCount: Int {
-        recentSamples.count
+        bufferAccessQueue.sync {
+            recentSamples.count
+        }
     }
 
     public func detectCardRectangle(in image: CGImage, completion: @escaping (VNRectangleObservation?) -> Void) {
@@ -134,9 +150,16 @@ public class CenteringAnalyzer {
     /// by a logo, text, or color block near the edge, which can look like a sharper "border"
     /// than the real, more gradual transition into the card's artwork.
     ///
-    /// NOTE: this alone is still noisy frame-to-frame (~10-15% swing on the worst axis). For a
-    /// stable, trustworthy reading, call `analyzeCenteringAveraged` instead — it wraps this
-    /// function with multi-frame median averaging and outlier rejection.
+    /// FIXED: added an orientation lock. Vision reports topLeft/topRight/bottomLeft/bottomRight
+    /// in the CAMERA IMAGE's coordinate space, not the card's. If the card (or phone) is held
+    /// sideways relative to the card's natural portrait shape, "left border" and "top border"
+    /// stop meaning the same physical edges from scan to scan. After perspective correction,
+    /// if the corrected image comes out wider than it is tall, we rotate it 90° so every
+    /// downstream measurement is always relative to the card's portrait orientation.
+    ///
+    /// NOTE: for a stable, trustworthy reading (not just a single frame), call
+    /// `analyzeCenteringAveraged` instead — it wraps this function with multi-frame median
+    /// averaging and outlier rejection.
     public func analyzeCenteringReal(from observation: VNRectangleObservation, in cgImage: CGImage) -> CenteringResult {
         let ciImage = CIImage(cgImage: cgImage)
         let extent = ciImage.extent
@@ -153,8 +176,24 @@ public class CenteringAnalyzer {
         perspectiveFilter.setValue(CIVector(cgPoint: bottomRight), forKey: "inputBottomRight")
 
         guard let correctedImage = perspectiveFilter.outputImage else { return fallbackCentering() }
+
+        // NEW: orientation lock. A standard trading card is taller than it is wide. If the
+        // perspective-corrected result is wider than it is tall, the card was captured
+        // sideways — rotate it 90° (always the same direction, for consistency) so "left/
+        // right" and "top/bottom" refer to the same physical edges every time regardless of
+        // how the phone was held.
+        var orientedImage = correctedImage
+        let correctedExtent = correctedImage.extent
+        if correctedExtent.width > correctedExtent.height {
+            let rotated = correctedImage.transformed(by: CGAffineTransform(rotationAngle: -CGFloat.pi / 2))
+            orientedImage = rotated.transformed(by: CGAffineTransform(
+                translationX: -rotated.extent.origin.x,
+                y: -rotated.extent.origin.y
+            ))
+        }
+
         let context = CIContext()
-        guard let correctedCGImage = context.createCGImage(correctedImage, from: correctedImage.extent),
+        guard let correctedCGImage = context.createCGImage(orientedImage, from: orientedImage.extent),
               let pixelData = correctedCGImage.dataProvider?.data,
               let buffer = CFDataGetBytePtr(pixelData) else {
             return fallbackCentering()
@@ -265,30 +304,38 @@ public class CenteringAnalyzer {
         )
     }
 
-    /// NEW: multi-frame averaged centering. Call this once per live camera frame instead of
-    /// calling `analyzeCenteringReal` directly. Internally it runs the single-frame scan, then
-    /// folds the result into a rolling buffer and returns the MEDIAN of recent samples — which
-    /// is dramatically more stable than any single frame, because random per-frame noise
+    /// Multi-frame averaged centering. Call this once per live camera frame instead of calling
+    /// `analyzeCenteringReal` directly. Internally it runs the single-frame scan, then folds
+    /// the result into a rolling buffer and returns the MEDIAN of recent samples — which is
+    /// dramatically more stable than any single frame, because random per-frame noise
     /// (lighting flicker, sensor noise, hand micro-shake) mostly cancels out across samples,
     /// while the card's real, unchanging centering stays put.
     ///
     /// If a new frame's reading is wildly different from the current running median, that's
     /// treated as a sign the card was moved/repositioned (not just noise) — the buffer resets
     /// so stale readings from before the move don't get blended into the new position.
+    ///
+    /// FIXED: all buffer reads/writes now happen inside bufferAccessQueue.sync, so this is
+    /// safe to call from a background thread (as processLiveCameraFrame does) at the same
+    /// time resetSampleBuffer() is called from the main thread.
     public func analyzeCenteringAveraged(from observation: VNRectangleObservation, in cgImage: CGImage) -> CenteringResult {
+        // The pixel-level scan itself doesn't touch shared state, so it can run outside the
+        // lock — only the buffer read/mutate/return needs to be serialized.
         let singleFrameResult = analyzeCenteringReal(from: observation, in: cgImage)
 
-        if let currentMedian = medianResult(from: recentSamples),
-           !isSampleConsistent(singleFrameResult, with: currentMedian) {
-            recentSamples.removeAll()
-        }
+        return bufferAccessQueue.sync {
+            if let currentMedian = medianResult(from: recentSamples),
+               !isSampleConsistent(singleFrameResult, with: currentMedian) {
+                recentSamples.removeAll()
+            }
 
-        recentSamples.append(singleFrameResult)
-        if recentSamples.count > maxSampleBufferSize {
-            recentSamples.removeFirst()
-        }
+            recentSamples.append(singleFrameResult)
+            if recentSamples.count > maxSampleBufferSize {
+                recentSamples.removeFirst()
+            }
 
-        return medianResult(from: recentSamples) ?? singleFrameResult
+            return medianResult(from: recentSamples) ?? singleFrameResult
+        }
     }
 
     private func isSampleConsistent(_ sample: CenteringResult, with median: CenteringResult) -> Bool {
