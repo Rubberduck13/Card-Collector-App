@@ -44,6 +44,9 @@ struct CardScannerView: View {
     // stable reading instead of whatever single noisy frame happened to land last.
     @State private var isCenteringStable = false
     @State private var centeringSampleCount = 0
+    // NEW: guards against triggering auto-advance more than once while multiple in-flight
+    // frame-processing Tasks might briefly all see "stable" before the phase change commits.
+    @State private var isAutoAdvancing = false
     
     @State private var showingActiveScanReport = false
     @State private var selectedVaultCard: SavedCard? = nil
@@ -83,6 +86,13 @@ struct CardScannerView: View {
             return isCenteringStable
         }
         return true
+    }
+    
+    // NEW: status line for the front-centering phase, reflecting level-gating.
+    private var statusTextForFrontCentering: String {
+        if isCenteringStable { return "Averaged Reading Locked (\(centeringSampleCount) samples)" }
+        if !calibrationEngine.isPerfectlyLevel { return "Level the Phone to Begin Averaging" }
+        return "Hold Steady — Averaging Frames..."
     }
     
     var body: some View {
@@ -194,12 +204,15 @@ struct CardScannerView: View {
                 }; Spacer()
             }.padding(.top, 10)
             // NEW: while on the front-centering phase and a card is detected but the
-            // averaged reading isn't stable yet, prompt the user to hold steady rather
-            // than letting them advance on a single noisy frame.
+            // averaged reading isn't stable yet, prompt the user to hold steady — or, if
+            // the phone isn't level, prompt that first. FIXED: the level bubble previously
+            // had no effect on the actual scan; now a tilted phone is called out explicitly
+            // and (see processLiveCameraFrame) frames captured while tilted are excluded
+            // from the centering average entirely, so the bubble now genuinely matters.
             if isCardDetected && currentPhase == .frontCentering && !isCenteringStable {
                 VStack {
                     Spacer()
-                    Text("HOLD STEADY... \(centeringSampleCount)/4")
+                    Text(calibrationEngine.isPerfectlyLevel ? "HOLD STEADY... \(centeringSampleCount)/4" : "LEVEL THE PHONE")
                         .font(.caption2).bold()
                         .padding(6)
                         .background(Color.black.opacity(0.6))
@@ -424,9 +437,9 @@ struct CardScannerView: View {
             return AnyView(HStack {
                 Text("Status:")
                 Spacer()
-                Text(isCenteringStable ? "Averaged Reading Locked (\(centeringSampleCount) samples)" : "Hold Steady — Averaging Frames...")
+                Text(statusTextForFrontCentering)
                     .bold()
-                    .foregroundColor(isCenteringStable ? .green : .orange)
+                    .foregroundColor(isCenteringStable ? .green : (calibrationEngine.isPerfectlyLevel ? .orange : .red))
             })
         case .surfaceTiltSweep:
             return AnyView(VStack(alignment: .leading, spacing: 4) {
@@ -544,6 +557,7 @@ struct CardScannerView: View {
         centeringAnalyzer.resetSampleBuffer()
         isCenteringStable = false
         centeringSampleCount = 0
+        isAutoAdvancing = false
         currentPhase = .frontCentering
         automaticCardIdentifier = selectedCategory == .sports ? "Ryan Feltner Neon Pink Refractor #16" : "Charizard Holo Base Set #4"
     }
@@ -551,21 +565,28 @@ struct CardScannerView: View {
         guard !isLoadingPrice && !isSaveConfirmed else { return }
         let targetNow = Date()
         guard targetNow.timeIntervalSince(lastProcessedFrameTime) >= 0.3 else { return }
+        // NEW: LiveCameraView's coordinator dispatches onFrameCaptured via
+        // DispatchQueue.main.async, so processLiveCameraFrame itself always runs on the
+        // main thread — meaning it's safe to read calibrationEngine.isPerfectlyLevel here,
+        // before handing off to the background Task below. FIXED: this is what makes the
+        // level bubble actually affect the scan instead of being purely cosmetic — a frame
+        // captured while the phone is tilted is excluded from the centering average.
+        let isDeviceLevelAtCapture = calibrationEngine.isPerfectlyLevel
         Task(priority: .userInitiated) {
             await MainActor.run { self.lastProcessedFrameTime = targetNow }
             centeringAnalyzer.detectCardRectangle(in: imageFrame) { recognizedObservation in
                 guard let cardRect = recognizedObservation else {
                     Task { @MainActor in
                         if self.isCardDetected { self.isCardDetected = false }
-                        // NEW: card dropped out of frame — clear the averaging buffer so a
+                        // Card dropped out of frame — clear the averaging buffer so a
                         // re-detected card (possibly repositioned) starts a fresh average.
+                        // resetSampleBuffer() is now thread-safe (serialized internally),
+                        // so this is safe even while a background Task is mid-scan.
                         self.centeringAnalyzer.resetSampleBuffer()
                         self.isCenteringStable = false
                         self.centeringSampleCount = 0
                     }; return
                 }
-                // NEW: use the multi-frame averaged reading instead of a single raw frame.
-                let computedCentering = self.centeringAnalyzer.analyzeCenteringAveraged(from: cardRect, in: imageFrame)
                 let automatedDefects = defectAnalyzer.analyzeCardSurface(from: imageFrame)
                 self.centeringAnalyzer.extractCardIdentifierText(from: imageFrame, cardBoundingBox: cardRect) { foundTextString in
                     Task { @MainActor in
@@ -575,12 +596,19 @@ struct CardScannerView: View {
                         }
                     }
                 }
+                // NEW: only feed this frame into the centering average if the phone was
+                // level at capture time. A tilted frame gets skipped for averaging purposes
+                // (though card detection and other phases still proceed normally).
+                let computedCentering: CenteringResult? = isDeviceLevelAtCapture
+                    ? self.centeringAnalyzer.analyzeCenteringAveraged(from: cardRect, in: imageFrame)
+                    : nil
                 Task { @MainActor in
                     if !self.isCardDetected { self.isCardDetected = true }
-                    self.scanResult = computedCentering
-                    // NEW: surface the buffer's current stability/sample-count to the UI.
-                    self.isCenteringStable = self.centeringAnalyzer.isStableReading
-                    self.centeringSampleCount = self.centeringAnalyzer.currentSampleCount
+                    if let computedCentering = computedCentering {
+                        self.scanResult = computedCentering
+                        self.isCenteringStable = self.centeringAnalyzer.isStableReading
+                        self.centeringSampleCount = self.centeringAnalyzer.currentSampleCount
+                    }
                     if currentPhase == .surfaceTiltSweep {
                         self.autoSurfaceScratches = automatedDefects.surfaceScratchCount
                         self.autoEdgeWhitening = imageFrame.width % 3 == 0 ? 1 : 0
@@ -588,6 +616,13 @@ struct CardScannerView: View {
                         self.autoCornerFraying = imageFrame.width % 2 == 0 ? 0 : 1
                     } else if currentPhase == .backPerimeter {
                         self.autoEdgeWhitening = automatedDefects.edgeWhiteningSeverity
+                    }
+                    // NEW: auto-advance out of front-centering the moment we have a stable,
+                    // level-gated averaged reading — no manual tap required. isAutoAdvancing
+                    // guards against multiple in-flight Tasks all triggering this at once.
+                    if currentPhase == .frontCentering && self.isCenteringStable && !self.isAutoAdvancing {
+                        self.isAutoAdvancing = true
+                        self.advanceInspectionFlowPipeline()
                     }
                 }
             }
