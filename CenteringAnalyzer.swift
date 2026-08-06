@@ -11,9 +11,9 @@ public struct CenteringResult {
 }
 
 public class CenteringAnalyzer {
-
+    
     public init() {}
-
+    
     // MARK: - Multi-Frame Averaging State
     // Rolling buffer of recent single-frame centering readings. Averaging (median) across
     // several frames is what actually kills frame-to-frame swing — a single frame is noisy
@@ -26,7 +26,7 @@ public class CenteringAnalyzer {
     // this many percentage points, treat it as the card having moved/been repositioned
     // (not just noise) and start the buffer over rather than blending it in.
     private let outlierRejectionThreshold = 20.0
-
+    
     // NEW: tracks the raw detected card corners from the previous frame. FIXED: averaging
     // alone only proves several frames' MEASURED PERCENTAGES agree with each other — it does
     // NOT prove the card had actually stopped moving. If the card is still being slid into
@@ -41,7 +41,7 @@ public class CenteringAnalyzer {
     // rectangle corners are in normalized image coordinates, so this is roughly "the card
     // outline moved by more than ~1.5% of the frame's width/height since the last frame."
     private let positionStabilityThreshold: CGFloat = 0.015
-
+    
     // FIXED (crash/lockup root cause): the buffer above is written to from the camera's
     // background Vision-processing thread (via analyzeCenteringAveraged, called from
     // processLiveCameraFrame's Task) AND cleared from the main thread (resetSampleBuffer,
@@ -50,7 +50,7 @@ public class CenteringAnalyzer {
     // after saving to Vault. All access to recentSamples now goes through this serial queue
     // so reads and writes can never overlap, regardless of which thread calls in.
     private let bufferAccessQueue = DispatchQueue(label: "com.thejudge.centeringanalyzer.bufferqueue")
-
+    
     /// Call this whenever card detection is lost, the scan phase resets, or a new card
     /// is presented — clears the rolling buffer so old samples don't bleed into a new scan.
     public func resetSampleBuffer() {
@@ -59,7 +59,7 @@ public class CenteringAnalyzer {
             lastObservedCorners = nil
         }
     }
-
+    
     /// True once enough consistent samples have accumulated that the averaged reading
     /// can be trusted (used to gate the "Lock & Advance" button / auto-advance on the
     /// front-centering phase).
@@ -68,7 +68,7 @@ public class CenteringAnalyzer {
             recentSamples.count >= minimumSamplesForStableReading
         }
     }
-
+    
     /// How many consistent samples are currently buffered (0...maxSampleBufferSize).
     /// Useful for showing "Hold steady... 3/4" style progress in the UI.
     public var currentSampleCount: Int {
@@ -76,10 +76,10 @@ public class CenteringAnalyzer {
             recentSamples.count
         }
     }
-
+    
     public func detectCardRectangle(in image: CGImage, completion: @escaping (VNRectangleObservation?) -> Void) {
         let requestHandler = VNImageRequestHandler(cgImage: image, options: [:])
-
+        
         let rectangleRequest = VNDetectRectanglesRequest { request, error in
             guard error == nil,
                   let results = request.results as? [VNRectangleObservation],
@@ -89,23 +89,23 @@ public class CenteringAnalyzer {
             }
             completion(primaryCard)
         }
-
+        
         rectangleRequest.minimumAspectRatio = 0.55
         rectangleRequest.maximumAspectRatio = 0.85
         rectangleRequest.minimumConfidence = 0.85
-
+        
         try? requestHandler.perform([rectangleRequest])
     }
-
+    
     public func extractCardIdentifierText(from image: CGImage, cardBoundingBox: VNRectangleObservation, completion: @escaping (String?) -> Void) {
         let requestHandler = VNImageRequestHandler(cgImage: image, options: [:])
-
+        
         let textRequest = VNRecognizeTextRequest { request, error in
             guard error == nil, let textObservations = request.results as? [VNRecognizedTextObservation] else {
                 completion(nil)
                 return
             }
-
+            
             for observation in textObservations {
                 guard let candidateText = observation.topCandidates(1).first?.string else { continue }
                 let normalizedText = candidateText.replacingOccurrences(of: " ", with: "")
@@ -116,43 +116,43 @@ public class CenteringAnalyzer {
             }
             completion(nil)
         }
-
+        
         textRequest.recognitionLevel = .accurate
         textRequest.usesLanguageCorrection = false
         textRequest.regionOfInterest = CGRect(x: 0.0, y: 0.0, width: 1.0, height: 0.15)
-
+        
         try? requestHandler.perform([textRequest])
     }
-
+    
     /// OLD (fake) centering function — kept for reference, no longer used
     public func analyzeCentering(from observation: VNRectangleObservation) -> CenteringResult {
         let absoluteLeftBoundary: Double = Double(observation.topLeft.x)
         let absoluteRightBoundary: Double = 1.0 - Double(observation.topRight.x)
         let absoluteTopBoundary: Double = 1.0 - Double(observation.topLeft.y)
         let absoluteBottomBoundary: Double = Double(observation.bottomLeft.y)
-
+        
         let simulatedArtFrameOffsetLeft: Double = absoluteLeftBoundary + 0.045
         let simulatedArtFrameOffsetRight: Double = absoluteRightBoundary + 0.048
         let simulatedArtFrameOffsetTop: Double = absoluteTopBoundary + 0.051
         let simulatedArtFrameOffsetBottom: Double = absoluteBottomBoundary + 0.050
-
+        
         let leftBorderWidth: Double = simulatedArtFrameOffsetLeft - absoluteLeftBoundary
         let rightBorderWidth: Double = simulatedArtFrameOffsetRight - absoluteRightBoundary
         let totalHorizontalBordersCombined: Double = leftBorderWidth + rightBorderWidth
-
+        
         let leftPercentage: Double = totalHorizontalBordersCombined > 0.0 ? (leftBorderWidth / totalHorizontalBordersCombined) * 100.0 : 50.0
         let rightPercentage: Double = totalHorizontalBordersCombined > 0.0 ? (rightBorderWidth / totalHorizontalBordersCombined) * 100.0 : 50.0
-
+        
         let topBorderWidth: Double = simulatedArtFrameOffsetTop - absoluteTopBoundary
         let bottomBorderWidth: Double = simulatedArtFrameOffsetBottom - absoluteBottomBoundary
         let totalVerticalBordersCombined: Double = topBorderWidth + bottomBorderWidth
-
+        
         let topPercentage: Double = totalVerticalBordersCombined > 0.0 ? (topBorderWidth / totalVerticalBordersCombined) * 100.0 : 50.0
         let bottomPercentage: Double = totalVerticalBordersCombined > 0.0 ? (bottomBorderWidth / totalVerticalBordersCombined) * 100.0 : 50.0
-
+        
         let passesPSA10: Bool = leftPercentage >= 40.0 && leftPercentage <= 60.0 && topPercentage >= 40.0 && topPercentage <= 60.0
         let passesBGS10: Bool = leftPercentage >= 48.0 && leftPercentage <= 52.0 && topPercentage >= 48.0 && topPercentage <= 52.0
-
+        
         return CenteringResult(
             leftRightRatio: (leftPercentage, rightPercentage),
             topBottomRatio: (topPercentage, bottomPercentage),
@@ -160,7 +160,7 @@ public class CenteringAnalyzer {
             passesBGS10: passesBGS10
         )
     }
-
+    
     /// NEW (real, improved) SINGLE-FRAME centering function — looks for a SUSTAINED shift in
     /// brightness, not just the single sharpest pixel-to-pixel jump. This avoids getting fooled
     /// by a logo, text, or color block near the edge, which can look like a sharper "border"
@@ -190,16 +190,16 @@ public class CenteringAnalyzer {
         let topRight = CGPoint(x: observation.topRight.x * extent.width, y: observation.topRight.y * extent.height)
         let bottomLeft = CGPoint(x: observation.bottomLeft.x * extent.width, y: observation.bottomLeft.y * extent.height)
         let bottomRight = CGPoint(x: observation.bottomRight.x * extent.width, y: observation.bottomRight.y * extent.height)
-
+        
         guard let perspectiveFilter = CIFilter(name: "CIPerspectiveCorrection") else { return nil }
         perspectiveFilter.setValue(ciImage, forKey: kCIInputImageKey)
         perspectiveFilter.setValue(CIVector(cgPoint: topLeft), forKey: "inputTopLeft")
         perspectiveFilter.setValue(CIVector(cgPoint: topRight), forKey: "inputTopRight")
         perspectiveFilter.setValue(CIVector(cgPoint: bottomLeft), forKey: "inputBottomLeft")
         perspectiveFilter.setValue(CIVector(cgPoint: bottomRight), forKey: "inputBottomRight")
-
+        
         guard let correctedImage = perspectiveFilter.outputImage else { return nil }
-
+        
         // NEW: orientation lock. A standard trading card is taller than it is wide. If the
         // perspective-corrected result is wider than it is tall, the card was captured
         // sideways — rotate it 90° (always the same direction, for consistency) so "left/
@@ -214,20 +214,20 @@ public class CenteringAnalyzer {
                 y: -rotated.extent.origin.y
             ))
         }
-
+        
         let context = CIContext()
         guard let correctedCGImage = context.createCGImage(orientedImage, from: orientedImage.extent),
               let pixelData = correctedCGImage.dataProvider?.data,
               let buffer = CFDataGetBytePtr(pixelData) else {
             return nil
         }
-
+        
         let width = correctedCGImage.width
         let height = correctedCGImage.height
         let bytesPerPixel = correctedCGImage.bitsPerPixel / 8
         let bytesPerRow = correctedCGImage.bytesPerRow
         let dataLength = CFDataGetLength(pixelData)
-
+        
         func brightness(x: Int, y: Int) -> Int {
             let offset = y * bytesPerRow + x * bytesPerPixel
             guard offset + 2 < dataLength, offset >= 0 else { return 0 }
@@ -236,17 +236,44 @@ public class CenteringAnalyzer {
             let b = Int(buffer[offset + 2])
             return (r + g + b) / 3
         }
-
+        
         // Finds where brightness SUSTAINABLY diverges from the border's own baseline color,
         // rather than reacting to a single sharp spike.
-        func scanLineForBorder(edge: String, lineOffset: Int) -> Int? {
+        //
+        // ADAPTIVE (replaces the old fixed divergenceThreshold = 30). A flat constant treats a
+        // subtle, low-contrast border-to-art transition (dim ambient light, dark border into
+        // dark art) exactly the same as a sharp, high-contrast one (bright light, white border
+        // into vivid art) — that mismatch is the dominant driver of the lighting-sensitive
+        // run-to-run spread seen in testing: under strong/glare-y lighting the line's real
+        // contrast range is large and a threshold of 30 fires too early (on a shadow or
+        // reflection near the edge); under flat, dim lighting the range is small and 30 may
+        // never fire at all, so the edge fails to detect (or detects very late).
+        //
+        // Fix: derive the threshold from a LOCAL window of this specific line's own brightness
+        // range — near where a real border transition should be — instead of a constant. Using
+        // only a local window (not the full half-frame scan) matters: the art on the far side of
+        // the border can have its own large brightness swings that have nothing to do with how
+        // sharp the border-to-art transition itself is, and would otherwise throw off the
+        // estimate. Floor/ceiling keep the result sane at the extremes — a near-flat window
+        // (very low local range) won't collapse toward ~0 and start firing on sensor noise, and
+        // a very high-contrast window won't demand an unreasonably large jump to register.
+        //
+        // SUB-PIXEL REFINEMENT: also returns a fractional (Double) position instead of a whole
+        // pixel index. On an integer pixel grid, the true physical edge almost never lands
+        // exactly on a sample point — rounding to the nearest whole pixel is what produced the
+        // coincidental exact ties (e.g. two scans both reading 50.0%/50.0%) seen in testing on
+        // axes that are genuinely close to centered but happened to round to the same integer
+        // boundary rather than actually being identical. Linearly interpolating between the last
+        // pre-crossing sample and the first post-crossing one estimates where the true edge sits
+        // between them.
+        func scanLineForBorder(edge: String, lineOffset: Int) -> Double? {
             let scanLength: Int
             switch edge {
             case "left", "right": scanLength = width / 2
             default: scanLength = height / 2
             }
             guard scanLength > 12 else { return nil }
-
+            
             func pixelAt(_ i: Int) -> Int {
                 switch edge {
                 case "left": return brightness(x: i, y: lineOffset)
@@ -255,37 +282,56 @@ public class CenteringAnalyzer {
                 default: return brightness(x: lineOffset, y: height - 1 - i)
                 }
             }
-
+            
+            // Precompute the whole brightness profile for this line once. It gets reused for
+            // the baseline, the local contrast range, and the threshold-crossing scan below —
+            // cheaper than repeatedly calling pixelAt() for each purpose, and it's what makes
+            // computing a proper local range practical.
+            var profile = [Int](repeating: 0, count: scanLength)
+            for i in 0..<scanLength { profile[i] = pixelAt(i) }
+            
             // Baseline = average brightness of the first few pixels (the border itself,
             // right at the card's cut edge)
             let baselineSampleCount = 4
-            var baselineSum = 0
-            for i in 0..<baselineSampleCount { baselineSum += pixelAt(i) }
-            let baseline = baselineSum / baselineSampleCount
-
-            let divergenceThreshold = 30
+            let baseline = profile[0..<baselineSampleCount].reduce(0, +) / baselineSampleCount
+            
+            let localWindowSize = min(scanLength, 60)
+            let localWindow = profile[0..<localWindowSize]
+            let localRange = (localWindow.max() ?? baseline) - (localWindow.min() ?? baseline)
+            let adaptiveDivergenceThreshold = max(12, min(50, Int(Double(localRange) * 0.2)))
+            
             let sustainedRunRequired = 5
-
+            
             var i = baselineSampleCount
             while i < scanLength - sustainedRunRequired {
-                let diff = abs(pixelAt(i) - baseline)
-                if diff > divergenceThreshold {
+                let signedDiff = profile[i] - baseline
+                if abs(signedDiff) > adaptiveDivergenceThreshold {
                     // Confirm this isn't just a one-pixel blip: check the next several
                     // pixels also diverge from baseline before accepting this as the border
                     var sustained = true
                     for offset in 1...sustainedRunRequired {
-                        if abs(pixelAt(i + offset) - baseline) <= divergenceThreshold {
+                        if abs(profile[i + offset] - baseline) <= adaptiveDivergenceThreshold {
                             sustained = false
                             break
                         }
                     }
-                    if sustained { return i }
+                    if sustained {
+                        let target = signedDiff > 0
+                            ? Double(baseline + adaptiveDivergenceThreshold)
+                            : Double(baseline - adaptiveDivergenceThreshold)
+                        let previous = Double(profile[i - 1])
+                        let current = Double(profile[i])
+                        let stepDelta = current - previous
+                        let fraction = stepDelta == 0 ? 0.0 : (target - previous) / stepDelta
+                        let clampedFraction = max(0.0, min(1.0, fraction))
+                        return Double(i - 1) + clampedFraction
+                    }
                 }
                 i += 1
             }
             return nil
         }
-
+        
         // FIXED: previously returned a fixed default of 12 when no sustained divergence was
         // found on any sample line for this edge — which silently produced a fake "perfectly
         // centered" 50/50 reading whenever BOTH left and right failed to detect (12/(12+12)
@@ -296,20 +342,27 @@ public class CenteringAnalyzer {
             let sampleCount = 7
             let dimension = (edge == "left" || edge == "right") ? height : width
             let margin = dimension / 4
-            var results: [Int] = []
-
+            var results: [Double] = []
+            
             for sample in 0..<sampleCount {
                 let position = margin + (sample * (dimension - 2 * margin) / (sampleCount - 1))
                 if let w = scanLineForBorder(edge: edge, lineOffset: position) {
                     results.append(w)
                 }
             }
-
+            
             guard !results.isEmpty else { return nil }
             let sorted = results.sorted()
-            return Double(sorted[sorted.count / 2])
+            // Proper median now that samples are continuous Doubles (not whole pixels): for
+            // an even sample count, average the two middle values instead of picking one
+            // arbitrarily.
+            let mid = sorted.count / 2
+            if sorted.count % 2 == 0 {
+                return (sorted[mid - 1] + sorted[mid]) / 2.0
+            }
+            return sorted[mid]
         }
-
+        
         // FIXED: if ANY edge failed to detect a border, this frame can't produce a trustworthy
         // centering reading at all — bail out entirely (return nil) rather than computing a
         // percentage from a mix of real and fabricated widths.
@@ -319,17 +372,17 @@ public class CenteringAnalyzer {
               let bottomBorder = findBorderWidth(edge: "bottom") else {
             return nil
         }
-
+        
         let totalH = leftBorder + rightBorder
         let totalV = topBorder + bottomBorder
         let leftPct = totalH > 0 ? (leftBorder / totalH) * 100 : 50
         let rightPct = 100 - leftPct
         let topPct = totalV > 0 ? (topBorder / totalV) * 100 : 50
         let bottomPct = 100 - topPct
-
+        
         let passesPSA10 = leftPct >= 40 && leftPct <= 60 && topPct >= 40 && topPct <= 60
         let passesBGS10 = leftPct >= 48 && leftPct <= 52 && topPct >= 48 && topPct <= 52
-
+        
         return CenteringResult(
             leftRightRatio: (leftPct, rightPct),
             topBottomRatio: (topPct, bottomPct),
@@ -337,7 +390,7 @@ public class CenteringAnalyzer {
             passesBGS10: passesBGS10
         )
     }
-
+    
     /// Multi-frame averaged centering. Call this once per live camera frame instead of calling
     /// `analyzeCenteringReal` directly. Internally it runs the single-frame scan, then folds
     /// the result into a rolling buffer and returns the MEDIAN of recent samples — which is
@@ -356,7 +409,7 @@ public class CenteringAnalyzer {
         // The pixel-level scan itself doesn't touch shared state, so it can run outside the
         // lock — only the buffer read/mutate/return needs to be serialized.
         let singleFrameResult = analyzeCenteringReal(from: observation, in: cgImage)
-
+        
         return bufferAccessQueue.sync {
             // NEW: check whether the card's actual detected outline moved since the last
             // frame. If it moved more than the tolerance, the user is still positioning the
@@ -367,7 +420,7 @@ public class CenteringAnalyzer {
             // card moved.
             let cardIsStationary = isPositionStable(observation)
             lastObservedCorners = (observation.topLeft, observation.topRight, observation.bottomLeft, observation.bottomRight)
-
+            
             // FIXED: analyzeCenteringReal now returns nil when this frame couldn't be
             // reliably measured (e.g. a border edge had no detectable divergence under the
             // current lighting). Previously a fake 50/50 fallback got silently folded into
@@ -376,27 +429,27 @@ public class CenteringAnalyzer {
             guard let singleFrameResult = singleFrameResult else {
                 return medianResult(from: recentSamples)
             }
-
+            
             if !cardIsStationary {
                 recentSamples.removeAll()
                 recentSamples.append(singleFrameResult)
                 return singleFrameResult
             }
-
+            
             if let currentMedian = medianResult(from: recentSamples),
                !isSampleConsistent(singleFrameResult, with: currentMedian) {
                 recentSamples.removeAll()
             }
-
+            
             recentSamples.append(singleFrameResult)
             if recentSamples.count > maxSampleBufferSize {
                 recentSamples.removeFirst()
             }
-
+            
             return medianResult(from: recentSamples) ?? singleFrameResult
         }
     }
-
+    
     /// Compares this frame's detected card corners against the previous frame's. Returns
     /// false (not stable) if this is the first frame seen (nothing to compare against yet)
     /// or if any corner moved more than positionStabilityThreshold.
@@ -413,13 +466,13 @@ public class CenteringAnalyzer {
         )
         return maxMovement < positionStabilityThreshold
     }
-
+    
     private func isSampleConsistent(_ sample: CenteringResult, with median: CenteringResult) -> Bool {
         let leftDelta = abs(sample.leftRightRatio.left - median.leftRightRatio.left)
         let topDelta = abs(sample.topBottomRatio.top - median.topBottomRatio.top)
         return leftDelta < outlierRejectionThreshold && topDelta < outlierRejectionThreshold
     }
-
+    
     private func medianResult(from samples: [CenteringResult]) -> CenteringResult? {
         guard !samples.isEmpty else { return nil }
         let lefts = samples.map { $0.leftRightRatio.left }.sorted()
@@ -428,10 +481,10 @@ public class CenteringAnalyzer {
         let medianTop = tops[tops.count / 2]
         let medianRight = 100 - medianLeft
         let medianBottom = 100 - medianTop
-
+        
         let passesPSA10 = medianLeft >= 40 && medianLeft <= 60 && medianTop >= 40 && medianTop <= 60
         let passesBGS10 = medianLeft >= 48 && medianLeft <= 52 && medianTop >= 48 && medianTop <= 52
-
+        
         return CenteringResult(
             leftRightRatio: (medianLeft, medianRight),
             topBottomRatio: (medianTop, medianBottom),
