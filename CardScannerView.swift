@@ -38,6 +38,13 @@ struct CardScannerView: View {
     @State private var autoEdgeWhitening = 0
     @State private var autoCornerFraying = 0
     
+    // NEW: tracks whether the multi-frame centering buffer has accumulated enough
+    // consistent samples yet. Drives the "Hold steady..." progress state and gates
+    // the advance button on the front-centering phase so users lock in an averaged,
+    // stable reading instead of whatever single noisy frame happened to land last.
+    @State private var isCenteringStable = false
+    @State private var centeringSampleCount = 0
+    
     @State private var showingActiveScanReport = false
     @State private var selectedVaultCard: SavedCard? = nil
     
@@ -65,6 +72,17 @@ struct CardScannerView: View {
     private var batchSegmentedCardRecords: [SavedCard] {
         guard let targetedId = selectedBatchFolderId else { return portfolio.savedCards }
         return portfolio.savedCards.filter { $0.targetBatchId == targetedId }
+    }
+    
+    // NEW: the advance button now requires a stable, averaged centering reading during
+    // the front-centering phase — not just raw card detection — before letting the user
+    // lock the phase in. Other phases only require card detection, same as before.
+    private var canAdvancePhase: Bool {
+        guard isCardDetected else { return false }
+        if currentPhase == .frontCentering {
+            return isCenteringStable
+        }
+        return true
     }
     
     var body: some View {
@@ -139,12 +157,12 @@ struct CardScannerView: View {
                             .bold()
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(isCardDetected ? Color.blue : Color.gray)
+                            .background(canAdvancePhase ? Color.blue : Color.gray)
                             .foregroundColor(.white)
                             .cornerRadius(10)
                     }
                     .padding(.horizontal)
-                    .disabled(!isCardDetected)
+                    .disabled(!canAdvancePhase)
                 }.padding(.vertical)
             }
             .navigationTitle("AI Grade Scanner")
@@ -175,6 +193,21 @@ struct CardScannerView: View {
                     Circle().fill(calibrationEngine.isPerfectlyLevel ? Color.green : Color.orange).frame(width: 10, height: 10).offset(x: CGFloat(calibrationEngine.currentRoll * 4), y: CGFloat(calibrationEngine.currentPitch * 4))
                 }; Spacer()
             }.padding(.top, 10)
+            // NEW: while on the front-centering phase and a card is detected but the
+            // averaged reading isn't stable yet, prompt the user to hold steady rather
+            // than letting them advance on a single noisy frame.
+            if isCardDetected && currentPhase == .frontCentering && !isCenteringStable {
+                VStack {
+                    Spacer()
+                    Text("HOLD STEADY... \(centeringSampleCount)/4")
+                        .font(.caption2).bold()
+                        .padding(6)
+                        .background(Color.black.opacity(0.6))
+                        .foregroundColor(.white)
+                        .cornerRadius(6)
+                        .padding(.bottom, 8)
+                }
+            }
         }.padding(.horizontal)
     }
     
@@ -388,7 +421,13 @@ struct CardScannerView: View {
     private func phaseStatusExplainerLayout() -> some View {
         switch currentPhase {
         case .frontCentering:
-            return AnyView(HStack { Text("Status:"); Spacer(); Text("Locking Front Border Grid Lines...").bold().foregroundColor(.green) })
+            return AnyView(HStack {
+                Text("Status:")
+                Spacer()
+                Text(isCenteringStable ? "Averaged Reading Locked (\(centeringSampleCount) samples)" : "Hold Steady — Averaging Frames...")
+                    .bold()
+                    .foregroundColor(isCenteringStable ? .green : .orange)
+            })
         case .surfaceTiltSweep:
             return AnyView(VStack(alignment: .leading, spacing: 4) {
                 HStack { Text("Gyro-Stabilization:"); Spacer(); Text("Active Sweep (Tilt Phone)").bold().foregroundColor(.purple) }
@@ -500,6 +539,11 @@ struct CardScannerView: View {
     private func resetCurrentScanState() {
         scanResult = nil; activeValuation = nil; calculatedGrade = nil; isSaveConfirmed = false; isCardDetected = false
         autoSurfaceScratches = 0; autoEdgeWhitening = 0; autoCornerFraying = 0
+        // NEW: clear the multi-frame centering buffer so a new card (or a new scan of the
+        // same card) starts averaging fresh rather than blending in stale samples.
+        centeringAnalyzer.resetSampleBuffer()
+        isCenteringStable = false
+        centeringSampleCount = 0
         currentPhase = .frontCentering
         automaticCardIdentifier = selectedCategory == .sports ? "Ryan Feltner Neon Pink Refractor #16" : "Charizard Holo Base Set #4"
     }
@@ -511,9 +555,17 @@ struct CardScannerView: View {
             await MainActor.run { self.lastProcessedFrameTime = targetNow }
             centeringAnalyzer.detectCardRectangle(in: imageFrame) { recognizedObservation in
                 guard let cardRect = recognizedObservation else {
-                    Task { @MainActor in if self.isCardDetected { self.isCardDetected = false } }; return
+                    Task { @MainActor in
+                        if self.isCardDetected { self.isCardDetected = false }
+                        // NEW: card dropped out of frame — clear the averaging buffer so a
+                        // re-detected card (possibly repositioned) starts a fresh average.
+                        self.centeringAnalyzer.resetSampleBuffer()
+                        self.isCenteringStable = false
+                        self.centeringSampleCount = 0
+                    }; return
                 }
-                let computedCentering = self.centeringAnalyzer.analyzeCenteringReal(from: cardRect, in: imageFrame)
+                // NEW: use the multi-frame averaged reading instead of a single raw frame.
+                let computedCentering = self.centeringAnalyzer.analyzeCenteringAveraged(from: cardRect, in: imageFrame)
                 let automatedDefects = defectAnalyzer.analyzeCardSurface(from: imageFrame)
                 self.centeringAnalyzer.extractCardIdentifierText(from: imageFrame, cardBoundingBox: cardRect) { foundTextString in
                     Task { @MainActor in
@@ -526,6 +578,9 @@ struct CardScannerView: View {
                 Task { @MainActor in
                     if !self.isCardDetected { self.isCardDetected = true }
                     self.scanResult = computedCentering
+                    // NEW: surface the buffer's current stability/sample-count to the UI.
+                    self.isCenteringStable = self.centeringAnalyzer.isStableReading
+                    self.centeringSampleCount = self.centeringAnalyzer.currentSampleCount
                     if currentPhase == .surfaceTiltSweep {
                         self.autoSurfaceScratches = automatedDefects.surfaceScratchCount
                         self.autoEdgeWhitening = imageFrame.width % 3 == 0 ? 1 : 0
@@ -620,4 +675,3 @@ struct ActiveScanReportSheet: View {
         }
     }
 }
-
