@@ -468,9 +468,11 @@ struct CardScannerView: View {
             executeGradingPipeline()
         }
     }
-    private func computeStrictGrade(result: CenteringResult, score: Double) -> Double {
-        (selectedCategory == .sports && !result.passesBGS10) ? max(1.0, score - 0.5) : score
-    }
+    // REMOVED: computeStrictGrade was dead code — never called anywhere in the pipeline.
+    // TheJudge.evaluateMultiPhaseCondition already applies a real sub-grade ceiling rule
+    // (final grade capped to the lowest sub-grade + 0.5), which is more correct than this
+    // function's centering-only check would have been. Deleting rather than leaving unused
+    // code that could mislead future debugging.
     private func computeDynamicPrice(strictGrade: Double, psa10Value: Double) -> Double {
         let base = selectedCategory == .sports ? 185.00 : psa10Value
         return base * max(0.1, strictGrade / 10.0)
@@ -572,6 +574,14 @@ struct CardScannerView: View {
         // level bubble actually affect the scan instead of being purely cosmetic — a frame
         // captured while the phone is tilted is excluded from the centering average.
         let isDeviceLevelAtCapture = calibrationEngine.isPerfectlyLevel
+        // FIXED (major bug): scanResult was being overwritten by every frame in every phase,
+        // not just front-centering. By the time grading ran at the end of phase 4, the grade
+        // was computed from whatever the camera saw in the LAST frame of the back-perimeter
+        // check — often mid-motion from tilting/flipping the card for the surface and corner
+        // sweeps — not the carefully averaged phase-1 reading. Centering must be measured and
+        // locked during phase 1 only; capturing the phase here (on the main thread, where
+        // currentPhase is safe to read) lets the background Task below gate on it.
+        let isFrontCenteringPhaseAtCapture = (currentPhase == .frontCentering)
         Task(priority: .userInitiated) {
             await MainActor.run { self.lastProcessedFrameTime = targetNow }
             centeringAnalyzer.detectCardRectangle(in: imageFrame) { recognizedObservation in
@@ -596,15 +606,17 @@ struct CardScannerView: View {
                         }
                     }
                 }
-                // NEW: only feed this frame into the centering average if the phone was
-                // level at capture time. A tilted frame gets skipped for averaging purposes
-                // (though card detection and other phases still proceed normally).
-                let computedCentering: CenteringResult? = isDeviceLevelAtCapture
+                // FIXED: only measure/average centering while still on the front-centering
+                // phase. Once locked and advanced past phase 1, scanResult is frozen — later
+                // phases (surface sweep, corner check, back perimeter) intentionally involve
+                // moving/tilting the card and must never overwrite the reading that grading
+                // actually uses.
+                let computedCentering: CenteringResult? = (isDeviceLevelAtCapture && isFrontCenteringPhaseAtCapture)
                     ? self.centeringAnalyzer.analyzeCenteringAveraged(from: cardRect, in: imageFrame)
                     : nil
                 Task { @MainActor in
                     if !self.isCardDetected { self.isCardDetected = true }
-                    if let computedCentering = computedCentering {
+                    if let computedCentering = computedCentering, currentPhase == .frontCentering {
                         self.scanResult = computedCentering
                         self.isCenteringStable = self.centeringAnalyzer.isStableReading
                         self.centeringSampleCount = self.centeringAnalyzer.currentSampleCount
