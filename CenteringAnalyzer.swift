@@ -176,7 +176,14 @@ public class CenteringAnalyzer {
     /// NOTE: for a stable, trustworthy reading (not just a single frame), call
     /// `analyzeCenteringAveraged` instead — it wraps this function with multi-frame median
     /// averaging and outlier rejection.
-    public func analyzeCenteringReal(from observation: VNRectangleObservation, in cgImage: CGImage) -> CenteringResult {
+    ///
+    /// FIXED: now returns nil instead of a fallback CenteringResult when the frame can't be
+    /// reliably measured (perspective correction failed, image couldn't be rendered, or a
+    /// border edge couldn't be detected). Previously these failure cases returned a fake
+    /// 50/50 "centered" result, which is indistinguishable from a real measurement to any
+    /// caller — nil makes "this frame failed" explicit so it can be skipped instead of
+    /// corrupting an average.
+    public func analyzeCenteringReal(from observation: VNRectangleObservation, in cgImage: CGImage) -> CenteringResult? {
         let ciImage = CIImage(cgImage: cgImage)
         let extent = ciImage.extent
         let topLeft = CGPoint(x: observation.topLeft.x * extent.width, y: observation.topLeft.y * extent.height)
@@ -184,14 +191,14 @@ public class CenteringAnalyzer {
         let bottomLeft = CGPoint(x: observation.bottomLeft.x * extent.width, y: observation.bottomLeft.y * extent.height)
         let bottomRight = CGPoint(x: observation.bottomRight.x * extent.width, y: observation.bottomRight.y * extent.height)
 
-        guard let perspectiveFilter = CIFilter(name: "CIPerspectiveCorrection") else { return fallbackCentering() }
+        guard let perspectiveFilter = CIFilter(name: "CIPerspectiveCorrection") else { return nil }
         perspectiveFilter.setValue(ciImage, forKey: kCIInputImageKey)
         perspectiveFilter.setValue(CIVector(cgPoint: topLeft), forKey: "inputTopLeft")
         perspectiveFilter.setValue(CIVector(cgPoint: topRight), forKey: "inputTopRight")
         perspectiveFilter.setValue(CIVector(cgPoint: bottomLeft), forKey: "inputBottomLeft")
         perspectiveFilter.setValue(CIVector(cgPoint: bottomRight), forKey: "inputBottomRight")
 
-        guard let correctedImage = perspectiveFilter.outputImage else { return fallbackCentering() }
+        guard let correctedImage = perspectiveFilter.outputImage else { return nil }
 
         // NEW: orientation lock. A standard trading card is taller than it is wide. If the
         // perspective-corrected result is wider than it is tall, the card was captured
@@ -212,7 +219,7 @@ public class CenteringAnalyzer {
         guard let correctedCGImage = context.createCGImage(orientedImage, from: orientedImage.extent),
               let pixelData = correctedCGImage.dataProvider?.data,
               let buffer = CFDataGetBytePtr(pixelData) else {
-            return fallbackCentering()
+            return nil
         }
 
         let width = correctedCGImage.width
@@ -279,7 +286,13 @@ public class CenteringAnalyzer {
             return nil
         }
 
-        func findBorderWidth(edge: String) -> Double {
+        // FIXED: previously returned a fixed default of 12 when no sustained divergence was
+        // found on any sample line for this edge — which silently produced a fake "perfectly
+        // centered" 50/50 reading whenever BOTH left and right failed to detect (12/(12+12)
+        // = 50.0%). That's a detection failure disguised as data, not a real measurement.
+        // Returning nil instead lets the caller treat this as "couldn't measure this frame"
+        // and skip it, rather than quietly injecting a misleading centered value.
+        func findBorderWidth(edge: String) -> Double? {
             let sampleCount = 7
             let dimension = (edge == "left" || edge == "right") ? height : width
             let margin = dimension / 4
@@ -292,15 +305,20 @@ public class CenteringAnalyzer {
                 }
             }
 
-            guard !results.isEmpty else { return 12 }
+            guard !results.isEmpty else { return nil }
             let sorted = results.sorted()
             return Double(sorted[sorted.count / 2])
         }
 
-        let leftBorder = findBorderWidth(edge: "left")
-        let rightBorder = findBorderWidth(edge: "right")
-        let topBorder = findBorderWidth(edge: "top")
-        let bottomBorder = findBorderWidth(edge: "bottom")
+        // FIXED: if ANY edge failed to detect a border, this frame can't produce a trustworthy
+        // centering reading at all — bail out entirely (return nil) rather than computing a
+        // percentage from a mix of real and fabricated widths.
+        guard let leftBorder = findBorderWidth(edge: "left"),
+              let rightBorder = findBorderWidth(edge: "right"),
+              let topBorder = findBorderWidth(edge: "top"),
+              let bottomBorder = findBorderWidth(edge: "bottom") else {
+            return nil
+        }
 
         let totalH = leftBorder + rightBorder
         let totalV = topBorder + bottomBorder
@@ -334,7 +352,7 @@ public class CenteringAnalyzer {
     /// FIXED: all buffer reads/writes now happen inside bufferAccessQueue.sync, so this is
     /// safe to call from a background thread (as processLiveCameraFrame does) at the same
     /// time resetSampleBuffer() is called from the main thread.
-    public func analyzeCenteringAveraged(from observation: VNRectangleObservation, in cgImage: CGImage) -> CenteringResult {
+    public func analyzeCenteringAveraged(from observation: VNRectangleObservation, in cgImage: CGImage) -> CenteringResult? {
         // The pixel-level scan itself doesn't touch shared state, so it can run outside the
         // lock — only the buffer read/mutate/return needs to be serialized.
         let singleFrameResult = analyzeCenteringReal(from: observation, in: cgImage)
@@ -344,9 +362,20 @@ public class CenteringAnalyzer {
             // frame. If it moved more than the tolerance, the user is still positioning the
             // card — treat this like a repositioning event and restart the buffer, same as
             // the outlier-rejection case below, rather than letting an in-motion frame count
-            // toward "stable."
+            // toward "stable." Position tracking updates regardless of whether this frame's
+            // pixel-level measurement succeeded — a failed measurement isn't evidence the
+            // card moved.
             let cardIsStationary = isPositionStable(observation)
             lastObservedCorners = (observation.topLeft, observation.topRight, observation.bottomLeft, observation.bottomRight)
+
+            // FIXED: analyzeCenteringReal now returns nil when this frame couldn't be
+            // reliably measured (e.g. a border edge had no detectable divergence under the
+            // current lighting). Previously a fake 50/50 fallback got silently folded into
+            // the average; now a failed frame is skipped entirely — it doesn't touch the
+            // buffer at all, and we just return whatever the buffer already had.
+            guard let singleFrameResult = singleFrameResult else {
+                return medianResult(from: recentSamples)
+            }
 
             if !cardIsStationary {
                 recentSamples.removeAll()
@@ -409,9 +438,5 @@ public class CenteringAnalyzer {
             passesPSA10: passesPSA10,
             passesBGS10: passesBGS10
         )
-    }
-
-    private func fallbackCentering() -> CenteringResult {
-        CenteringResult(leftRightRatio: (50, 50), topBottomRatio: (50, 50), passesPSA10: true, passesBGS10: true)
     }
 }
