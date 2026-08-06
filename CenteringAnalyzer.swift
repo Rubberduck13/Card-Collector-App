@@ -27,6 +27,21 @@ public class CenteringAnalyzer {
     // (not just noise) and start the buffer over rather than blending it in.
     private let outlierRejectionThreshold = 20.0
 
+    // NEW: tracks the raw detected card corners from the previous frame. FIXED: averaging
+    // alone only proves several frames' MEASURED PERCENTAGES agree with each other — it does
+    // NOT prove the card had actually stopped moving. If the card is still being slid into
+    // place, several consecutive frames can happen to agree while genuinely capturing the
+    // card at different real positions on different scans, which looked exactly like what
+    // was reported: "didn't seem the card was even lined up before it captured and moved
+    // on." This tracks the card's actual detected corner positions frame-to-frame and only
+    // lets a sample into the buffer if the card was physically stationary — a much stronger,
+    // more honest signal that the user has actually finished positioning it.
+    private var lastObservedCorners: (topLeft: CGPoint, topRight: CGPoint, bottomLeft: CGPoint, bottomRight: CGPoint)?
+    // Normalized-coordinate (0...1) tolerance for corner movement between frames. Vision's
+    // rectangle corners are in normalized image coordinates, so this is roughly "the card
+    // outline moved by more than ~1.5% of the frame's width/height since the last frame."
+    private let positionStabilityThreshold: CGFloat = 0.015
+
     // FIXED (crash/lockup root cause): the buffer above is written to from the camera's
     // background Vision-processing thread (via analyzeCenteringAveraged, called from
     // processLiveCameraFrame's Task) AND cleared from the main thread (resetSampleBuffer,
@@ -41,6 +56,7 @@ public class CenteringAnalyzer {
     public func resetSampleBuffer() {
         bufferAccessQueue.sync {
             recentSamples.removeAll()
+            lastObservedCorners = nil
         }
     }
 
@@ -324,6 +340,20 @@ public class CenteringAnalyzer {
         let singleFrameResult = analyzeCenteringReal(from: observation, in: cgImage)
 
         return bufferAccessQueue.sync {
+            // NEW: check whether the card's actual detected outline moved since the last
+            // frame. If it moved more than the tolerance, the user is still positioning the
+            // card — treat this like a repositioning event and restart the buffer, same as
+            // the outlier-rejection case below, rather than letting an in-motion frame count
+            // toward "stable."
+            let cardIsStationary = isPositionStable(observation)
+            lastObservedCorners = (observation.topLeft, observation.topRight, observation.bottomLeft, observation.bottomRight)
+
+            if !cardIsStationary {
+                recentSamples.removeAll()
+                recentSamples.append(singleFrameResult)
+                return singleFrameResult
+            }
+
             if let currentMedian = medianResult(from: recentSamples),
                !isSampleConsistent(singleFrameResult, with: currentMedian) {
                 recentSamples.removeAll()
@@ -336,6 +366,23 @@ public class CenteringAnalyzer {
 
             return medianResult(from: recentSamples) ?? singleFrameResult
         }
+    }
+
+    /// Compares this frame's detected card corners against the previous frame's. Returns
+    /// false (not stable) if this is the first frame seen (nothing to compare against yet)
+    /// or if any corner moved more than positionStabilityThreshold.
+    private func isPositionStable(_ observation: VNRectangleObservation) -> Bool {
+        guard let last = lastObservedCorners else { return false }
+        func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
+            hypot(a.x - b.x, a.y - b.y)
+        }
+        let maxMovement = max(
+            distance(observation.topLeft, last.topLeft),
+            distance(observation.topRight, last.topRight),
+            distance(observation.bottomLeft, last.bottomLeft),
+            distance(observation.bottomRight, last.bottomRight)
+        )
+        return maxMovement < positionStabilityThreshold
     }
 
     private func isSampleConsistent(_ sample: CenteringResult, with median: CenteringResult) -> Bool {
