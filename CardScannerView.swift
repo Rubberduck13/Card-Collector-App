@@ -612,8 +612,8 @@ struct CardScannerView: View {
                 // moving/tilting the card and must never overwrite the reading that grading
                 // actually uses.
                 let computedCentering: CenteringResult? = (isDeviceLevelAtCapture && isFrontCenteringPhaseAtCapture)
-                    ? self.centeringAnalyzer.analyzeCenteringAveraged(from: cardRect, in: imageFrame)
-                    : nil
+                ? self.centeringAnalyzer.analyzeCenteringAveraged(from: cardRect, in: imageFrame)
+                : nil
                 Task { @MainActor in
                     if !self.isCardDetected { self.isCardDetected = true }
                     if let computedCentering = computedCentering, currentPhase == .frontCentering {
