@@ -10,6 +10,40 @@ public struct CenteringResult {
     public let passesBGS10: Bool
 }
 
+// NEW: per-edge diagnostic snapshot. This is the "see the raw measurements" instrumentation
+// requested to debug the L/R inconsistency — since Swift Playgrounds has no Xcode console,
+// this is designed to be read directly from the UI (via `lastDiagnostics` /
+// `diagnosticsSummaryText` below) rather than printed to a log you can't see on-device.
+public struct EdgeDiagnostic {
+    public let edge: String
+    /// The final sub-pixel border position this edge resolved to (median across sample
+    /// lines), or nil if not enough sample lines detected a border to produce a reading.
+    public let borderPosition: Double?
+    /// Average of the local brightness range (max-min within the ~60px local window) across
+    /// the sample lines that succeeded for this edge. Low values mean a low-contrast/flat
+    /// border-to-art transition; high values mean a sharp one.
+    public let averageLocalContrastRange: Int
+    /// Average of the adaptive divergence threshold actually used, derived from the local
+    /// contrast range above (floored at 12, capped at 50).
+    public let averageAdaptiveThreshold: Int
+    /// Average baseline brightness (the border's own color) across successful sample lines.
+    public let averageBaseline: Int
+    /// One entry per sample line attempted for this edge (7 by default), in scan order.
+    /// nil means that specific sample line failed to find a sustained divergence at all.
+    /// Seeing which specific lines failed/succeeded, and how much they disagree with each
+    /// other, is the key signal for telling apart "glare confusing detection on some lines"
+    /// vs. "the card was genuinely repositioned."
+    public let sampleLineResults: [Double?]
+}
+
+public struct CenteringDiagnostics {
+    public let left: EdgeDiagnostic
+    public let right: EdgeDiagnostic
+    public let top: EdgeDiagnostic
+    public let bottom: EdgeDiagnostic
+    public let timestamp: Date
+}
+
 public class CenteringAnalyzer {
     
     public init() {}
@@ -50,6 +84,39 @@ public class CenteringAnalyzer {
     // after saving to Vault. All access to recentSamples now goes through this serial queue
     // so reads and writes can never overlap, regardless of which thread calls in.
     private let bufferAccessQueue = DispatchQueue(label: "com.thejudge.centeringanalyzer.bufferqueue")
+    
+    // NEW: separate serial queue guarding the diagnostics snapshot, so reading diagnostics
+    // from the UI thread never contends with the buffer lock above.
+    private let diagnosticsAccessQueue = DispatchQueue(label: "com.thejudge.centeringanalyzer.diagnosticsqueue")
+    private var _lastDiagnostics: CenteringDiagnostics?
+    
+    /// The most recent per-edge diagnostic snapshot, safe to read from the UI thread at any
+    /// time (e.g. to drive a small debug overlay/Text view in the scanner screen). Updated
+    /// on every call to `analyzeCenteringReal`, including frames that ultimately fail — so
+    /// you can see WHY a frame failed, not just that it did.
+    public var lastDiagnostics: CenteringDiagnostics? {
+        diagnosticsAccessQueue.sync { _lastDiagnostics }
+    }
+    
+    private func setLastDiagnostics(_ diagnostics: CenteringDiagnostics) {
+        diagnosticsAccessQueue.sync { _lastDiagnostics = diagnostics }
+    }
+    
+    /// Human-readable multi-line dump of the last diagnostics snapshot, meant to be dropped
+    /// straight into a Text() view in the scanner UI. This is the on-device substitute for
+    /// print-statement debugging, since Swift Playgrounds builds run via TestFlight with no
+    /// attached Xcode console.
+    public var diagnosticsSummaryText: String {
+        guard let d = lastDiagnostics else { return "No diagnostics captured yet." }
+        func line(_ diag: EdgeDiagnostic) -> String {
+            let posText = diag.borderPosition.map { String(format: "%.2f", $0) } ?? "FAILED"
+            let samplesText = diag.sampleLineResults
+                .map { $0.map { String(format: "%.1f", $0) } ?? "x" }
+                .joined(separator: ", ")
+            return "\(diag.edge.uppercased()): pos=\(posText)  baseline=\(diag.averageBaseline)  localRange=\(diag.averageLocalContrastRange)  threshold=\(diag.averageAdaptiveThreshold)  lines=[\(samplesText)]"
+        }
+        return [line(d.left), line(d.right), line(d.top), line(d.bottom)].joined(separator: "\n")
+    }
     
     /// Call this whenever card detection is lost, the scan phase resets, or a new card
     /// is presented — clears the rolling buffer so old samples don't bleed into a new scan.
@@ -161,6 +228,15 @@ public class CenteringAnalyzer {
         )
     }
     
+    /// Internal per-sample-line scan result, now carrying diagnostic detail alongside the
+    /// sub-pixel position so findBorderWidth can aggregate it into an EdgeDiagnostic.
+    private struct LineScanResult {
+        let position: Double
+        let baseline: Int
+        let localRange: Int
+        let adaptiveThreshold: Int
+    }
+    
     /// NEW (real, improved) SINGLE-FRAME centering function — looks for a SUSTAINED shift in
     /// brightness, not just the single sharpest pixel-to-pixel jump. This avoids getting fooled
     /// by a logo, text, or color block near the edge, which can look like a sharper "border"
@@ -183,6 +259,11 @@ public class CenteringAnalyzer {
     /// 50/50 "centered" result, which is indistinguishable from a real measurement to any
     /// caller — nil makes "this frame failed" explicit so it can be skipped instead of
     /// corrupting an average.
+    ///
+    /// NEW: on every call (success or failure), captures a CenteringDiagnostics snapshot
+    /// into `lastDiagnostics` — the raw per-edge sample-line positions, local contrast range,
+    /// and adaptive threshold actually used. This is the on-device visibility needed to tell
+    /// apart a glare/finish issue from a physical-repositioning issue on the L/R axis.
     public func analyzeCenteringReal(from observation: VNRectangleObservation, in cgImage: CGImage) -> CenteringResult? {
         let ciImage = CIImage(cgImage: cgImage)
         let extent = ciImage.extent
@@ -266,7 +347,7 @@ public class CenteringAnalyzer {
         // boundary rather than actually being identical. Linearly interpolating between the last
         // pre-crossing sample and the first post-crossing one estimates where the true edge sits
         // between them.
-        func scanLineForBorder(edge: String, lineOffset: Int) -> Double? {
+        func scanLineForBorder(edge: String, lineOffset: Int) -> LineScanResult? {
             let scanLength: Int
             switch edge {
             case "left", "right": scanLength = width / 2
@@ -324,7 +405,12 @@ public class CenteringAnalyzer {
                         let stepDelta = current - previous
                         let fraction = stepDelta == 0 ? 0.0 : (target - previous) / stepDelta
                         let clampedFraction = max(0.0, min(1.0, fraction))
-                        return Double(i - 1) + clampedFraction
+                        return LineScanResult(
+                            position: Double(i - 1) + clampedFraction,
+                            baseline: baseline,
+                            localRange: localRange,
+                            adaptiveThreshold: adaptiveDivergenceThreshold
+                        )
                     }
                 }
                 i += 1
@@ -338,38 +424,76 @@ public class CenteringAnalyzer {
         // = 50.0%). That's a detection failure disguised as data, not a real measurement.
         // Returning nil instead lets the caller treat this as "couldn't measure this frame"
         // and skip it, rather than quietly injecting a misleading centered value.
-        func findBorderWidth(edge: String) -> Double? {
+        //
+        // NEW: also builds and returns the EdgeDiagnostic for this edge, so every sample
+        // line's individual result (or failure) is visible, not just the final median width.
+        func findBorderWidth(edge: String) -> (width: Double?, diagnostic: EdgeDiagnostic)? {
             let sampleCount = 7
             let dimension = (edge == "left" || edge == "right") ? height : width
             let margin = dimension / 4
-            var results: [Double] = []
+            var lineResults: [LineScanResult?] = []
             
             for sample in 0..<sampleCount {
                 let position = margin + (sample * (dimension - 2 * margin) / (sampleCount - 1))
-                if let w = scanLineForBorder(edge: edge, lineOffset: position) {
-                    results.append(w)
-                }
+                lineResults.append(scanLineForBorder(edge: edge, lineOffset: position))
             }
             
-            guard !results.isEmpty else { return nil }
-            let sorted = results.sorted()
-            // Proper median now that samples are continuous Doubles (not whole pixels): for
-            // an even sample count, average the two middle values instead of picking one
-            // arbitrarily.
-            let mid = sorted.count / 2
-            if sorted.count % 2 == 0 {
-                return (sorted[mid - 1] + sorted[mid]) / 2.0
+            let successfulResults = lineResults.compactMap { $0 }
+            let positions = successfulResults.map { $0.position }.sorted()
+            
+            let medianWidth: Double?
+            if positions.isEmpty {
+                medianWidth = nil
+            } else {
+                // Proper median now that samples are continuous Doubles (not whole pixels):
+                // for an even sample count, average the two middle values instead of
+                // picking one arbitrarily.
+                let mid = positions.count / 2
+                medianWidth = positions.count % 2 == 0
+                    ? (positions[mid - 1] + positions[mid]) / 2.0
+                    : positions[mid]
             }
-            return sorted[mid]
+            
+            let avgBaseline = successfulResults.isEmpty ? 0 : successfulResults.map { $0.baseline }.reduce(0, +) / successfulResults.count
+            let avgLocalRange = successfulResults.isEmpty ? 0 : successfulResults.map { $0.localRange }.reduce(0, +) / successfulResults.count
+            let avgThreshold = successfulResults.isEmpty ? 0 : successfulResults.map { $0.adaptiveThreshold }.reduce(0, +) / successfulResults.count
+            
+            let diagnostic = EdgeDiagnostic(
+                edge: edge,
+                borderPosition: medianWidth,
+                averageLocalContrastRange: avgLocalRange,
+                averageAdaptiveThreshold: avgThreshold,
+                averageBaseline: avgBaseline,
+                sampleLineResults: lineResults.map { $0?.position }
+            )
+            
+            return (medianWidth, diagnostic)
+        }
+        
+        let leftResult = findBorderWidth(edge: "left")
+        let rightResult = findBorderWidth(edge: "right")
+        let topResult = findBorderWidth(edge: "top")
+        let bottomResult = findBorderWidth(edge: "bottom")
+        
+        // Capture diagnostics regardless of whether the overall frame succeeds or fails, so
+        // a failed frame's per-edge detail is still visible on-device.
+        if let leftResult, let rightResult, let topResult, let bottomResult {
+            setLastDiagnostics(CenteringDiagnostics(
+                left: leftResult.diagnostic,
+                right: rightResult.diagnostic,
+                top: topResult.diagnostic,
+                bottom: bottomResult.diagnostic,
+                timestamp: Date()
+            ))
         }
         
         // FIXED: if ANY edge failed to detect a border, this frame can't produce a trustworthy
         // centering reading at all — bail out entirely (return nil) rather than computing a
         // percentage from a mix of real and fabricated widths.
-        guard let leftBorder = findBorderWidth(edge: "left"),
-              let rightBorder = findBorderWidth(edge: "right"),
-              let topBorder = findBorderWidth(edge: "top"),
-              let bottomBorder = findBorderWidth(edge: "bottom") else {
+        guard let leftBorder = leftResult?.width,
+              let rightBorder = rightResult?.width,
+              let topBorder = topResult?.width,
+              let bottomBorder = bottomResult?.width else {
             return nil
         }
         
