@@ -317,8 +317,8 @@ public class CenteringAnalyzer {
                     }
                     if sustained {
                         let target = signedDiff > 0
-                            ? Double(baseline + adaptiveDivergenceThreshold)
-                            : Double(baseline - adaptiveDivergenceThreshold)
+                        ? Double(baseline + adaptiveDivergenceThreshold)
+                        : Double(baseline - adaptiveDivergenceThreshold)
                         let previous = Double(profile[i - 1])
                         let current = Double(profile[i])
                         let stepDelta = current - previous
