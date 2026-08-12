@@ -759,3 +759,5 @@ struct ActiveScanReportSheet: View {
             .padding(.horizontal)
             Spacer()
         }
+    }
+}
