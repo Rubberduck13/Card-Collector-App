@@ -95,6 +95,27 @@ struct CardScannerView: View {
         return "Hold Steady — Averaging Frames..."
     }
     
+    // NEW (fix): the center-guide box previously turned green on ANY card detection,
+    // regardless of whether the centering reading was actually good — meaning a badly
+    // off-center card would still show the same "all clear" green as a well-centered one.
+    // Now: outside the front-centering phase, green still just means "card detected"
+    // (there's no centering reading to verify there). During front-centering specifically,
+    // green requires BOTH a stable averaged reading AND that reading actually passing the
+    // PSA10 centering threshold — a detected-but-poorly-centered card now shows orange
+    // instead, so the color is telling the truth about alignment quality, not just presence.
+    private var guideBoxColor: Color {
+        guard isCardDetected else { return Color.white.opacity(0.4) }
+        if currentPhase == .frontCentering {
+            let isVerifiedGoodCentering = isCenteringStable && (scanResult?.passesPSA10 ?? false)
+            return isVerifiedGoodCentering ? Color.green : Color.orange
+        }
+        return Color.green
+    }
+    
+    private var guideBoxLineWidth: CGFloat {
+        isCardDetected ? 4 : 2
+    }
+    
     var body: some View {
         TabView(selection: $selectedTab) {
             scannerDashboardView.tabItem { Label("Scanner", systemImage: "viewfinder.lens") }.tag(0)
@@ -155,6 +176,18 @@ struct CardScannerView: View {
                             HStack { Text("Isolated Asset Profile:"); Spacer(); Text(automaticCardIdentifier).bold().foregroundColor(.blue) }
                             Divider()
                             phaseStatusExplainerLayout()
+                            // NEW: live diagnostic dump from CenteringAnalyzer for on-device
+                            // debugging during iPhone TestFlight testing — no Xcode console
+                            // available in that build path, so this surfaces the raw per-edge
+                            // sample-line data (position, baseline, local contrast range,
+                            // adaptive threshold) directly in the UI during front-centering.
+                            if currentPhase == .frontCentering {
+                                Divider()
+                                Text(centeringAnalyzer.diagnosticsSummaryText)
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(6)
+                            }
                         }
                         .font(.footnote)
                         .padding()
@@ -191,7 +224,7 @@ struct CardScannerView: View {
     private var cameraViewportSection: some View {
         ZStack {
             LiveCameraView { processLiveCameraFrame($0) }.environmentObject(calibrationEngine).frame(height: 240).cornerRadius(12).clipped()
-            RoundedRectangle(cornerRadius: 16).stroke(isCardDetected ? Color.green : Color.white.opacity(0.4), lineWidth: isCardDetected ? 4 : 2).frame(width: 170, height: 210)
+            RoundedRectangle(cornerRadius: 16).stroke(guideBoxColor, lineWidth: guideBoxLineWidth).frame(width: 170, height: 210)
                 .overlay(Group {
                     if !isCardDetected {
                         VStack { Image(systemName: "viewfinder").font(.title2); Text("ALIGN CARD").font(.caption2).bold().padding(4).background(Color.black.opacity(0.6)).cornerRadius(4) }.foregroundColor(.white)
@@ -621,11 +654,17 @@ struct CardScannerView: View {
                         self.isCenteringStable = self.centeringAnalyzer.isStableReading
                         self.centeringSampleCount = self.centeringAnalyzer.currentSampleCount
                     }
+                    // FIXED: these were placeholder `imageFrame.width % N` computations that
+                    // had nothing to do with the actual card in frame. automatedDefects is
+                    // already computed above from a real DefectAnalyzer pass over this exact
+                    // frame — surfaceScratchCount and edgeWhiteningSeverity were already being
+                    // used correctly elsewhere in this function; edgeWhiteningSeverity and the
+                    // new cornerFrayingSeverity now feed these two phases the same way.
                     if currentPhase == .surfaceTiltSweep {
                         self.autoSurfaceScratches = automatedDefects.surfaceScratchCount
-                        self.autoEdgeWhitening = imageFrame.width % 3 == 0 ? 1 : 0
+                        self.autoEdgeWhitening = automatedDefects.edgeWhiteningSeverity
                     } else if currentPhase == .cornerMacroCheck {
-                        self.autoCornerFraying = imageFrame.width % 2 == 0 ? 0 : 1
+                        self.autoCornerFraying = automatedDefects.cornerFrayingSeverity
                     } else if currentPhase == .backPerimeter {
                         self.autoEdgeWhitening = automatedDefects.edgeWhiteningSeverity
                     }
@@ -720,5 +759,3 @@ struct ActiveScanReportSheet: View {
             .padding(.horizontal)
             Spacer()
         }
-    }
-}
