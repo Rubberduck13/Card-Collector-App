@@ -20,11 +20,11 @@ struct CardScannerView: View {
     @StateObject private var priceEngine = PricingEngine()
     @StateObject private var portfolio = PortfolioState()
     @StateObject private var securityVault = UserSecurity()
-    
+
     private let gradingJudge = TheJudge()
     private let centeringAnalyzer = CenteringAnalyzer()
     private let defectAnalyzer = DefectAnalyzer()
-    
+
     @State private var currentPhase: ScanningPhase = .frontCentering
     @State private var scanResult: CenteringResult?
     @State private var activeValuation: CardValuation?
@@ -33,11 +33,11 @@ struct CardScannerView: View {
     @State private var isSaveConfirmed = false
     @State private var isCardDetected = false
     @State private var automaticCardIdentifier = "Processing Viewport..."
-    
+
     @State private var autoSurfaceScratches = 0
     @State private var autoEdgeWhitening = 0
     @State private var autoCornerFraying = 0
-    
+
     // NEW: tracks whether the multi-frame centering buffer has accumulated enough
     // consistent samples yet. Drives the "Hold steady..." progress state and gates
     // the advance button on the front-centering phase so users lock in an averaged,
@@ -47,10 +47,10 @@ struct CardScannerView: View {
     // NEW: guards against triggering auto-advance more than once while multiple in-flight
     // frame-processing Tasks might briefly all see "stable" before the phase change commits.
     @State private var isAutoAdvancing = false
-    
+
     @State private var showingActiveScanReport = false
     @State private var selectedVaultCard: SavedCard? = nil
-    
+
     @State private var selectedCategory: CardCategory = .sports
     @State private var selectedTab = 0
     @State private var searchVaultQuery = ""
@@ -65,18 +65,18 @@ struct CardScannerView: View {
     @State private var passportSelectedBatchId: UUID? = nil
     @State private var selectedMonitorCard: SavedCard? = nil
     @State private var lastProcessedFrameTime = Date.distantPast
-    
+
     private var filteredVaultRecords: [SavedCard] {
         searchVaultQuery.isEmpty ? portfolio.savedCards : portfolio.savedCards.filter {
             $0.name.localizedCaseInsensitiveContains(searchVaultQuery) || $0.setName.localizedCaseInsensitiveContains(searchVaultQuery)
         }
     }
-    
+
     private var batchSegmentedCardRecords: [SavedCard] {
         guard let targetedId = selectedBatchFolderId else { return portfolio.savedCards }
         return portfolio.savedCards.filter { $0.targetBatchId == targetedId }
     }
-    
+
     // NEW: the advance button now requires a stable, averaged centering reading during
     // the front-centering phase — not just raw card detection — before letting the user
     // lock the phase in. Other phases only require card detection, same as before.
@@ -87,14 +87,14 @@ struct CardScannerView: View {
         }
         return true
     }
-    
+
     // NEW: status line for the front-centering phase, reflecting level-gating.
     private var statusTextForFrontCentering: String {
         if isCenteringStable { return "Averaged Reading Locked (\(centeringSampleCount) samples)" }
         if !calibrationEngine.isPerfectlyLevel { return "Level the Phone to Begin Averaging" }
         return "Hold Steady — Averaging Frames..."
     }
-    
+
     // NEW (fix): the center-guide box previously turned green on ANY card detection,
     // regardless of whether the centering reading was actually good — meaning a badly
     // off-center card would still show the same "all clear" green as a well-centered one.
@@ -111,11 +111,11 @@ struct CardScannerView: View {
         }
         return Color.green
     }
-    
+
     private var guideBoxLineWidth: CGFloat {
         isCardDetected ? 4 : 2
     }
-    
+
     var body: some View {
         TabView(selection: $selectedTab) {
             scannerDashboardView.tabItem { Label("Scanner", systemImage: "viewfinder.lens") }.tag(0)
@@ -135,7 +135,7 @@ struct CardScannerView: View {
             if selectedMonitorCard == nil { selectedMonitorCard = portfolio.savedCards.first }
         }
     }
-    
+
     private var scannerDashboardView: some View {
         NavigationView {
             ScrollView {
@@ -150,7 +150,7 @@ struct CardScannerView: View {
                     .onChange(of: selectedCategory) {
                         resetCurrentScanState()
                     }
-                    
+
                     HStack(spacing: 4) {
                         ForEach(ScanningPhase.allCases, id: \.self) { phase in
                             Rectangle()
@@ -159,14 +159,14 @@ struct CardScannerView: View {
                         }
                     }
                     .padding(.horizontal)
-                    
+
                     Text(currentPhase.rawValue)
                         .font(.system(.subheadline, design: .monospaced))
                         .bold()
                         .foregroundColor(.secondary)
-                    
+
                     cameraViewportSection
-                    
+
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Image(systemName: "bolt.shield.fill").foregroundColor(.blue)
@@ -183,10 +183,16 @@ struct CardScannerView: View {
                             // adaptive threshold) directly in the UI during front-centering.
                             if currentPhase == .frontCentering {
                                 Divider()
+                                // FIXED: previously capped at lineLimit(6), which was cutting
+                                // off the TOP/BOTTOM diagnostic lines entirely and only ever
+                                // showing LEFT/RIGHT — the opposite axis of whichever one
+                                // turns out to be misbehaving on a given test run. No line
+                                // limit now; this view already sits inside a ScrollView so it
+                                // can grow without breaking the layout.
                                 Text(centeringAnalyzer.diagnosticsSummaryText)
                                     .font(.system(size: 8, design: .monospaced))
                                     .foregroundColor(.secondary)
-                                    .lineLimit(6)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                         .font(.footnote)
@@ -194,7 +200,7 @@ struct CardScannerView: View {
                         .background(Color(.secondarySystemBackground))
                         .cornerRadius(10)
                     }.padding(.horizontal)
-                    
+
                     Button(action: { advanceInspectionFlowPipeline() }) {
                         Text(currentPhase == .backPerimeter ? "Calculate Comprehensive Multi-Phase Grade" : "Lock & Advance to Next Scanning Phase")
                             .bold()
@@ -220,7 +226,7 @@ struct CardScannerView: View {
             .onDisappear { calibrationEngine.stopDeviceLevelMonitoring() }
         }
     }
-    
+
     private var cameraViewportSection: some View {
         ZStack {
             LiveCameraView { processLiveCameraFrame($0) }.environmentObject(calibrationEngine).frame(height: 240).cornerRadius(12).clipped()
@@ -256,7 +262,7 @@ struct CardScannerView: View {
             }
         }.padding(.horizontal)
     }
-    
+
     private var vaultAnalyticsView: some View {
         NavigationView {
             VStack(spacing: 0) {
