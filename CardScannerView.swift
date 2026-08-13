@@ -180,20 +180,27 @@ struct CardScannerView: View {
                             // debugging during iPhone TestFlight testing — no Xcode console
                             // available in that build path, so this surfaces the raw per-edge
                             // sample-line data (position, baseline, local contrast range,
-                            // adaptive threshold) directly in the UI during front-centering.
-                            if currentPhase == .frontCentering {
-                                Divider()
-                                // FIXED: previously capped at lineLimit(6), which was cutting
-                                // off the TOP/BOTTOM diagnostic lines entirely and only ever
-                                // showing LEFT/RIGHT — the opposite axis of whichever one
-                                // turns out to be misbehaving on a given test run. No line
-                                // limit now; this view already sits inside a ScrollView so it
-                                // can grow without breaking the layout.
-                                Text(centeringAnalyzer.diagnosticsSummaryText)
-                                    .font(.system(size: 8, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
+                            // adaptive threshold) directly in the UI.
+                            //
+                            // FIXED: previously gated to `currentPhase == .frontCentering`
+                            // only — but auto-advance fires the instant centering locks,
+                            // often faster than there's time to screenshot. lastDiagnostics
+                            // is a frozen snapshot from the moment centering locked (it isn't
+                            // overwritten by later phases, which don't call
+                            // analyzeCenteringReal), so it's safe and actually useful to keep
+                            // showing it through phases 2-4 as well — same data, just now
+                            // there's time to actually capture it.
+                            Divider()
+                            // FIXED: previously capped at lineLimit(6), which was cutting
+                            // off the TOP/BOTTOM diagnostic lines entirely and only ever
+                            // showing LEFT/RIGHT — the opposite axis of whichever one
+                            // turns out to be misbehaving on a given test run. No line
+                            // limit now; this view already sits inside a ScrollView so it
+                            // can grow without breaking the layout.
+                            Text(centeringAnalyzer.diagnosticsSummaryText)
+                                .font(.system(size: 8, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         .font(.footnote)
                         .padding()
@@ -674,13 +681,18 @@ struct CardScannerView: View {
                     } else if currentPhase == .backPerimeter {
                         self.autoEdgeWhitening = automatedDefects.edgeWhiteningSeverity
                     }
-                    // NEW: auto-advance out of front-centering the moment we have a stable,
-                    // level-gated averaged reading — no manual tap required. isAutoAdvancing
-                    // guards against multiple in-flight Tasks all triggering this at once.
-                    if currentPhase == .frontCentering && self.isCenteringStable && !self.isAutoAdvancing {
-                        self.isAutoAdvancing = true
-                        self.advanceInspectionFlowPipeline()
-                    }
+                    // TEMPORARILY DISABLED for debugging: auto-advance was firing the instant
+                    // a stable reading locked, which made it impossible to screenshot the full
+                    // locked-state diagnostic panel before the phase jumped to surface-scan.
+                    // The "Lock & Advance" button still works manually (canAdvancePhase already
+                    // requires isCenteringStable), so this doesn't block testing — it just stops
+                    // the auto-jump so the locked centering + diagnostics stay on screen until
+                    // you're ready. Re-enable by uncommenting once the L/R and T/B axis-flip
+                    // instability is resolved and confirmed via captured diagnostics.
+                    // if currentPhase == .frontCentering && self.isCenteringStable && !self.isAutoAdvancing {
+                    //     self.isAutoAdvancing = true
+                    //     self.advanceInspectionFlowPipeline()
+                    // }
                 }
             }
         }
