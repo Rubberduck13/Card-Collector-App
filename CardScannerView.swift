@@ -136,37 +136,57 @@ struct CardScannerView: View {
         }
     }
 
+    // FIXED (layout): the capture/advance button used to live at the bottom of the same
+    // ScrollView as the diagnostics dump. Once the diagnostics text stopped being clipped
+    // (an earlier fix), that panel could grow tall enough to push the button off-screen
+    // entirely — you could see the camera or the button, never both, without scrolling.
+    // Restructured so the camera viewport, phase indicator, and the Lock & Advance button
+    // now live in a fixed (non-scrolling) block at the top of the screen — always visible
+    // together. Only the metrics/diagnostics panel below scrolls, so a long diagnostics
+    // dump can grow freely without ever hiding the capture controls again.
     private var scannerDashboardView: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    Picker("Profile", selection: $selectedCategory) {
-                        ForEach(CardCategory.allCases, id: \.self) { category in
-                            Text(category.rawValue).tag(category)
-                        }
+            VStack(spacing: 16) {
+                Picker("Profile", selection: $selectedCategory) {
+                    ForEach(CardCategory.allCases, id: \.self) { category in
+                        Text(category.rawValue).tag(category)
                     }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
-                    .onChange(of: selectedCategory) {
-                        resetCurrentScanState()
-                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .onChange(of: selectedCategory) {
+                    resetCurrentScanState()
+                }
 
-                    HStack(spacing: 4) {
-                        ForEach(ScanningPhase.allCases, id: \.self) { phase in
-                            Rectangle()
-                                .fill(phase == currentPhase ? Color.blue : (ScanningPhase.allCases.firstIndex(of: phase)! < ScanningPhase.allCases.firstIndex(of: currentPhase)! ? Color.green : Color.gray.opacity(0.3)))
-                                .frame(height: 5)
-                        }
+                HStack(spacing: 4) {
+                    ForEach(ScanningPhase.allCases, id: \.self) { phase in
+                        Rectangle()
+                            .fill(phase == currentPhase ? Color.blue : (ScanningPhase.allCases.firstIndex(of: phase)! < ScanningPhase.allCases.firstIndex(of: currentPhase)! ? Color.green : Color.gray.opacity(0.3)))
+                            .frame(height: 5)
                     }
-                    .padding(.horizontal)
+                }
+                .padding(.horizontal)
 
-                    Text(currentPhase.rawValue)
-                        .font(.system(.subheadline, design: .monospaced))
+                Text(currentPhase.rawValue)
+                    .font(.system(.subheadline, design: .monospaced))
+                    .bold()
+                    .foregroundColor(.secondary)
+
+                cameraViewportSection
+
+                Button(action: { advanceInspectionFlowPipeline() }) {
+                    Text(currentPhase == .backPerimeter ? "Calculate Comprehensive Multi-Phase Grade" : "Lock & Advance to Next Scanning Phase")
                         .bold()
-                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(canAdvancePhase ? Color.blue : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .padding(.horizontal)
+                .disabled(!canAdvancePhase)
 
-                    cameraViewportSection
-
+                ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Image(systemName: "bolt.shield.fill").foregroundColor(.blue)
@@ -196,7 +216,9 @@ struct CardScannerView: View {
                             // showing LEFT/RIGHT — the opposite axis of whichever one
                             // turns out to be misbehaving on a given test run. No line
                             // limit now; this view already sits inside a ScrollView so it
-                            // can grow without breaking the layout.
+                            // can grow without breaking the layout. It's also now the ONLY
+                            // thing in the scrollable area, so it growing long no longer
+                            // pushes the camera/button off-screen (see scannerDashboardView).
                             Text(centeringAnalyzer.diagnosticsSummaryText)
                                 .font(.system(size: 8, design: .monospaced))
                                 .foregroundColor(.secondary)
@@ -206,21 +228,12 @@ struct CardScannerView: View {
                         .padding()
                         .background(Color(.secondarySystemBackground))
                         .cornerRadius(10)
-                    }.padding(.horizontal)
-
-                    Button(action: { advanceInspectionFlowPipeline() }) {
-                        Text(currentPhase == .backPerimeter ? "Calculate Comprehensive Multi-Phase Grade" : "Lock & Advance to Next Scanning Phase")
-                            .bold()
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(canAdvancePhase ? Color.blue : Color.gray)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
                     }
                     .padding(.horizontal)
-                    .disabled(!canAdvancePhase)
-                }.padding(.vertical)
+                    .padding(.bottom)
+                }
             }
+            .padding(.top)
             .navigationTitle("AI Grade Scanner")
             .sheet(isPresented: $showingActiveScanReport) {
                 if let result = scanResult, let grade = calculatedGrade {
