@@ -694,18 +694,16 @@ struct CardScannerView: View {
                     } else if currentPhase == .backPerimeter {
                         self.autoEdgeWhitening = automatedDefects.edgeWhiteningSeverity
                     }
-                    // TEMPORARILY DISABLED for debugging: auto-advance was firing the instant
-                    // a stable reading locked, which made it impossible to screenshot the full
-                    // locked-state diagnostic panel before the phase jumped to surface-scan.
-                    // The "Lock & Advance" button still works manually (canAdvancePhase already
-                    // requires isCenteringStable), so this doesn't block testing — it just stops
-                    // the auto-jump so the locked centering + diagnostics stay on screen until
-                    // you're ready. Re-enable by uncommenting once the L/R and T/B axis-flip
-                    // instability is resolved and confirmed via captured diagnostics.
-                    // if currentPhase == .frontCentering && self.isCenteringStable && !self.isAutoAdvancing {
-                    //     self.isAutoAdvancing = true
-                    //     self.advanceInspectionFlowPipeline()
-                    // }
+                    // RE-ENABLED: auto-advance was temporarily disabled to allow screenshotting
+                    // the locked diagnostic panel while chasing the axis-swap bug. The manual
+                    // "Lock & Advance" button remains as a fallback either way (canAdvancePhase
+                    // already requires isCenteringStable). isAutoAdvancing still guards against
+                    // multiple in-flight frame-processing Tasks all seeing "stable" at once and
+                    // firing the phase change more than once.
+                    if currentPhase == .frontCentering && self.isCenteringStable && !self.isAutoAdvancing {
+                        self.isAutoAdvancing = true
+                        self.advanceInspectionFlowPipeline()
+                    }
                 }
             }
         }
