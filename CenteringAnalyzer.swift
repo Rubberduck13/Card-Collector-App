@@ -42,6 +42,17 @@ public struct CenteringDiagnostics {
     public let top: EdgeDiagnostic
     public let bottom: EdgeDiagnostic
     public let timestamp: Date
+    // NEW: geometry/orientation diagnostics, added to chase down the identical-repeated-
+    // sample-line bug seen on the BOTTOM edge (all 7 lines returning the exact same
+    // position — impossible from real photographic noise, points at a uniform artifact in
+    // the pixel buffer, most likely from the rotation/perspective-correction step). Capturing
+    // whether rotation fired and the exact pixel dimensions at each stage lets us confirm or
+    // rule out a corrupted/padded buffer on the next test pass instead of guessing again.
+    public let wasRotated: Bool
+    public let correctedWidth: Int
+    public let correctedHeight: Int
+    public let orientedWidth: Int
+    public let orientedHeight: Int
 }
 
 public class CenteringAnalyzer {
@@ -115,7 +126,13 @@ public class CenteringAnalyzer {
                 .joined(separator: ", ")
             return "\(diag.edge.uppercased()): pos=\(posText)  baseline=\(diag.averageBaseline)  localRange=\(diag.averageLocalContrastRange)  threshold=\(diag.averageAdaptiveThreshold)  lines=[\(samplesText)]"
         }
-        return [line(d.left), line(d.right), line(d.top), line(d.bottom)].joined(separator: "\n")
+        // NEW: geometry/orientation header line, printed first. This is what lets us confirm
+        // or rule out a corrupted/padded pixel buffer from the rotation step as the cause of
+        // the identical-repeated-sample-line failures seen on individual edges — if
+        // orientedWidth/Height look wrong relative to correctedWidth/Height (e.g. an
+        // unexpected few pixels of extra padding on one side), that's the smoking gun.
+        let geometryLine = "ROTATED=\(d.wasRotated)  corrected=\(d.correctedWidth)x\(d.correctedHeight)  oriented=\(d.orientedWidth)x\(d.orientedHeight)"
+        return ([geometryLine] + [line(d.left), line(d.right), line(d.top), line(d.bottom)]).joined(separator: "\n")
     }
 
     // NEW (root-cause fix for the intermittent L/R+T/B axis-swap): previously the
@@ -295,6 +312,12 @@ public class CenteringAnalyzer {
     /// into `lastDiagnostics` — the raw per-edge sample-line positions, local contrast range,
     /// and adaptive threshold actually used. This is the on-device visibility needed to tell
     /// apart a glare/finish issue from a physical-repositioning issue on the L/R axis.
+    ///
+    /// NEW: also captures the corrected/oriented image dimensions and whether rotation fired,
+    /// added specifically to chase down cases where an entire edge's 7 sample lines all
+    /// return the exact same position (a signature that cannot come from real photographic
+    /// noise, and most likely means a uniform artifact — e.g. rendering padding introduced
+    /// by the rotation step — is being detected as the "border" instead of the real one).
     public func analyzeCenteringReal(from observation: VNRectangleObservation, in cgImage: CGImage) -> CenteringResult? {
         let ciImage = CIImage(cgImage: cgImage)
         let extent = ciImage.extent
@@ -340,6 +363,11 @@ public class CenteringAnalyzer {
                 y: -rotated.extent.origin.y
             ))
         }
+        // NEW: captured for the geometry diagnostic line. If orientedExtent's width/height
+        // don't cleanly match correctedExtent's (swapped) dimensions — e.g. a few pixels of
+        // unexpected padding — that's the smoking gun for the identical-repeated-sample-line
+        // failures seen on individual edges.
+        let orientedExtent = orientedImage.extent
 
         let context = CIContext()
         guard let correctedCGImage = context.createCGImage(orientedImage, from: orientedImage.extent),
@@ -528,7 +556,12 @@ public class CenteringAnalyzer {
                 right: rightResult.diagnostic,
                 top: topResult.diagnostic,
                 bottom: bottomResult.diagnostic,
-                timestamp: Date()
+                timestamp: Date(),
+                wasRotated: shouldRotate,
+                correctedWidth: Int(correctedExtent.width),
+                correctedHeight: Int(correctedExtent.height),
+                orientedWidth: Int(orientedExtent.width),
+                orientedHeight: Int(orientedExtent.height)
             ))
         }
 
