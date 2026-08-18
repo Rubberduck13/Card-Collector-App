@@ -1,126 +1,176 @@
-THE JUDGE — CORE PROTOCOL & SPECIFICATION MANIFESTO
-Strategic Vision, Autonomous Diagnostic Framework, & Global Valuation Architecture
+# THE JUDGE — CORE PROTOCOL & TECHNICAL SPECIFICATION MANIFESTO
+## The Definitive Elite-Tier Pre-Submission Diagnostic Protocol & Comprehensive Global Business Plan
 
-ARCHITECTURE NOTE (merge record): An earlier draft of this plan ("Strategic Business Plan: Proprietary AI Sports Card Grading Platform") described a cloud/server-side computer vision pipeline — images uploaded to a Node/Express backend for processing via `grading_engine.js`. That is superseded: the actual, working implementation is a fully on-device pipeline (Vision framework + Core Image, native Swift), consistent with Section 6's "Decentralized Execution" principle below. `grading_engine.js` and the Node backend's mock grading path are known-fake legacy code, not the real pipeline, and their fate (isolate vs. retire) is still an open decision tracked separately. If a server-side track is still wanted for some other reason (e.g. bulk/enterprise batch processing at scale), it should be scoped explicitly as a distinct, later addition — not conflated with the core on-device grading pipeline this document specifies.
+---
 
-1. EXECUTIVE SUMMARY & VISION
+### 1. EXECUTIVE PRODUCT POSITIONING, VISION, & MARKET DISRUPTION
 
-"The Judge" is engineered to be the definitive global software benchmark for trading card verification, structural diagnostics, and raw market valuation — putting an automated, unbiased, instantaneous grading expert into every collector's pocket.
+#### The Core Mission
+To democratize high-grade trading card valuation by delivering an absolute, automated, unbiased, and instantaneous diagnostic grading expert into the hands of every collector globally.
 
-The Core Problem: Traditional grading (PSA, Beckett/BGS, SGC, CGC) is slow, expensive ($15–$100+ per card), and manually subjective. Existing scanning apps (Ludex, CollX) are primarily inventory/database lookup tools, or rely on rigid, paid third-party vision APIs (e.g. Ximilar) that impose per-image operating costs and limit how deeply the analysis can go.
+#### The Market Void
+Traditional physical grading laboratories (such as PSA, BGS, SGC, and CGC) operate on slow turnaround times, aggressive and volatile submission pricing tiers ($15 to $100+ per card), and heavily criticized human subjectivity. Existing mobile alternatives (e.g., Ludex, CollX) function primarily as simple inventory checklist scanners or rely entirely on rigid, cost-prohibitive, flat-image third-party APIs (such as Ximilar). These legacy solutions suffer from high per-image overhead and lack the granular micro-defect analysis required to evaluate high-value assets.
 
-Rather than seeking to immediately replace the physical encapsulation and serialization mechanisms of legacy grading laboratories, "The Judge" operates as an indispensable, high-utility pre-submission diagnostic ecosystem. It serves two distinct market pillars:
+#### Our Disruptive Solution
+**"The Judge"** is engineered to be the definitive global software benchmark for trading card verification, structural diagnostics, and raw market valuation. Rather than seeking to immediately replace the physical encapsulation and serialization mechanisms of legacy grading laboratories, "The Judge" operates as an indispensable, high-utility pre-submission diagnostic ecosystem. It serves two distinct market pillars:
 
-The Risk-Mitigation Engine: Providing collectors with flawless mathematical forecasting of legacy lab outcomes before capital is deployed on physical submission fees.
-The Raw Market Trade Standard: Acting as a trusted, objective, raw-case pricing protocol for brick-and-mortar hobby shops, regional trading conventions, and peer-to-peer raw inventory transactions.
+* **The Risk-Mitigation Engine**: Providing elite investors and everyday collectors with flawless mathematical forecasting of legacy lab outcomes before capital is deployed on physical submission and shipping fees.
+* **The Raw Market Trade Standard**: Acting as a trusted, objective, raw-case pricing protocol for brick-and-mortar hobby shops, regional trading conventions, and peer-to-peer raw inventory transactions. 
 
 "The Judge" delivers absolute objectivity, instant multi-dimensional reports, and unconditional reproducibility. If the card's physical condition has not altered, the system will output the identical grade across infinite iterative scans.
 
-Competitive Edge:
-- vs. Legacy third-party vision APIs (e.g. Ximilar): those are bound by flat-image limitations and per-image pricing. Our edge: on-device multi-angle/video verification with zero per-image API fees, since the vision pipeline is proprietary and local rather than a metered external call.
-- vs. Scanning/inventory wrappers (e.g. Ludex, CollX): those focus on database lookup over deep micro-imperfection analysis. Our edge: pre-processing and metrology aimed at true pixel-level border, edge, and surface analysis rather than identification-only scanning.
+```
+                  [ USER DEVICE / CLIENT-SIDE VIEWPORT INTERFACE ]
+                                         │
+                        (Guided Video "Condition Sweep")
+                                         │
+                                         ▼
+                     [ IMAGE PRE-PROCESSING ANTI-DISTORTION ENGINE ]
+                     (Flattens Smartphone Computational Photography)
+                                         │
+                                         ▼
+                     [ PROP_CORE COMPUTER VISION SYSTEM PIPELINE ]
+      ┌──────────────────────┬──────────────────────┬──────────────────────┐
+      │                      │                      │                      │
+      ▼                      ▼                      ▼                      ▼
+ [CENTERING METROLOGY]   [EDGE SCANNER]      [CORNER PROFILER]     [SURFACE INSPECTOR]
+ (Sub-Pixel Boundary)   (Contrast/Chipping)   (Sports vs. TCG)     (Specular Glare Stream)
+      │                      │                      │                      │
+      └──────────────────────┴───────────┬──────────┴──────────────────────┘
+                                         │
+                                         ▼
+                         [ ISOLATED PROPRIETARY SCORING MODULE ]
+                         (Dynamic Sub-Grade Weighting Formula)
+                                         │
+                                         ▼
+                        [ THE DUAL-SCALE GRADED RESPONSE ]
+                 ┌───────────────────────┴───────────────────────┐
+                 ▼                                               ▼
+     [PREDICTIVE LEGACY SIMULATION]               ["THE JUDGE" TRUE GRADE SCALE]
+     (PSA / BGS / SGC Tolerances)                 (100-Point Absolute Precision)
+                                         │
+                                         ▼
+                        [ CONTINUOUS ML FLYWHEEL REGISTER ]
+                     (Trusted User Overrides & Retraining Loop)
+```
 
-2. TARGET MARKET
+---
 
-1. The Casual Collector/Flipper: wants a quick smartphone scan to decide whether a card is worth the cost of physical slab grading.
-2. Bulk Shop Owners: local card shops managing high-volume inventory, needing fast, standardized batch assessments.
-3. TCG Players: need rapid condition tags for instant marketplace listings.
+### 2. THE LIVING CONTINUUM & ETHOS OF INFINITE SELF-IMPROVEMENT
 
-3. THE DUAL-SCALE GRADING MATRIX
+"The Judge" is fundamentally not a static software product, a basic scanning wrapper, or a simplified tool built for casual convenience at the expense of accuracy. It is designed as a **living, continuous continuum of updating knowledge and autonomous machine learning**. 
 
-To command 100% market respect from casual hobbyists and elite high-end investors alike, the system processes and displays two distinct diagnostic conclusions:
+#### The Living Adaptability Clause
+The software architecture incorporates an uncompromised continuous learning loop. Every digital ingestion, granular scan, and verified physical outcome creates data arrays that securely feed back into our custom training repository. As users submit image data and correct grading deviations, the aggregated data creates a proprietary machine-learning flywheel, continuously increasing the platform's accuracy and enterprise asset value over time.
 
-A. The Predictive Legacy Tier (Simulation Engine)
+#### Uncompromised Market Dominance
+This platform is engineered to explicitly outperform anything else on the global market developed by any competitor or corporation. By moving entirely away from rigid flat-image processing, "The Judge" gives everyday collectors an institutional-grade advantage before buying raw inventory or risking capital on submission fees, while commanding absolute authority among elite, seven-figure alternative-asset investors.
 
-Objective: Replicate the exact, real-world grading tolerances and known leniencies of major grading bodies.
-Logic Framework: Programmed to accommodate historical grading guardrails (e.g., applying PSA's standard allowance where a 60/40 horizontal centering distribution can still qualify for a Gem Mint 10 designation; Beckett/BGS trends notably stricter, closer to a 50/50 standard, at the top grade tier).
+---
 
-B. "The Judge" True Grade Scale (Uncompromising Precision)
+### 3. THE DUAL-SCALE GRADING MATRIX
 
-Objective: Eradicate human subjectivity and institutional variance by deploying a ruthless, 100-point mathematical condition scale.
-Logic Framework: A true condition metric where perfection requires exact geometric symmetry and a zero-defect surface matrix. This scale serves as the precise benchmark for pricing raw, unencapsulated cards in retail showcases.
+To secure complete authority across all tiers of the trading card industry—from casual hobbyists to ultra-high-net-worth portfolio managers—the grading pipeline processes and renders two distinct diagnostic conclusions simultaneously:
 
-4. ADVANCED CORE ENGINEERING & TECHNICAL PIPELINE
+#### A. The Predictive Legacy Tier (Simulation Engine)
+* **Objective**: Replicate the exact, real-world grading tolerances, structural criteria, and historical leniencies of major grading bodies.
+* **Logic Framework**: Programmed to accommodate known legacy grading variations. For example, applying PSA's standard allowance where a 60/40 horizontal centering distribution can still qualify for a Gem Mint 10 designation, or factoring in BGS’s strict sub-grade calculations.
 
-Every developer and AI assistant contributing to this repository must engineer features to meet the following high-proficiency multi-frame computer vision parameters. All processing below is on-device (see Architecture Note) — no image data is sent to an external server or third-party vision API as part of the core grading pipeline.
+#### B. "The Judge" True Grade Scale (Uncompromising Precision)
+* **Objective**: Eradicate human subjectivity, institutional bias, and environmental variance by deploying a ruthless, 100-point mathematical condition scale.
+* **Logic Framework**: A true condition metric where perfection requires exact geometric symmetry and a zero-defect surface matrix. This scale serves as the precise benchmark for pricing raw, unencapsulated cards in retail showcases, establishing an entirely new standard for peer-to-peer commerce.
 
-A. Guided Ingestion & Orientation Spatial Grid
+---
 
-The frontend must deploy a high-contrast responsive viewport framing overlay. This forces standard spatial orientation and physical card distance initialization to minimize mathematical skew.
+### 4. ADVANCED PRODUCT & TECHNICAL ARCHITECTURE (MODULAR PROPRIETARY PIPELINE)
 
-A capture environment standard is part of this spec, not optional guidance: consistent lighting (a fixed or diffused light source, not ambient/mixed lighting), a neutral high-contrast backing mat (not a surface close in brightness to typical card borders), and a fixed phone-to-card distance. Legacy grading labs achieve their measurement consistency primarily through controlled capture conditions (flatbed scanners, studio lighting), not exotic algorithms — the capture standard is load-bearing for accuracy, not cosmetic.
+The entire application stack is built natively on a modular framework optimized for lightning-fast execution, horizontal microservice scaling, and complete freedom from dependency on third-party vision APIs.
 
-A0. Anti-Distortion Pre-Processing Pass
+#### Module A: Image Pre-Processing (Anti-Distortion Engine)
+Modern smartphone hardware injects aggressive computational photography (such as artificial sharpness, edge smoothing, over-saturation, and "cartooning" textures) to make casual photos look appealing. These modifications degrade structural data.
+* **The Living Rule**: Before passing data to the computer vision layers, the frontend application or server-side pre-processor executes targeted image-correction filters to flatten textures, strip out AI sharpness anomalies, and restore the digital image back to its raw, mathematically authentic physical state.
 
-Modern smartphone cameras apply computational photography (sharpening, noise smoothing, HDR tone-mapping) before an app ever sees the pixel data. This is not cosmetic — sharpening in particular can inject false contrast/haloing directly at high-contrast transitions like card borders, which is a plausible contributor to spurious edge-detection triggers seen in real testing (e.g. divergence firing immediately adjacent to the true border rather than at it). Before any centering, edge, or surface metrology runs, captured frames should pass through an on-device normalization step that flattens sharpening-induced artifacts back toward a more raw pixel representation. This is a data-quality gate ahead of the measurement code, not a substitute for fixing the measurement code itself.
+#### Module B: The Quad-Grading Core Pipeline (Structural & Forensic Matrices)
+1. **Centering Metrology Engine**: Measures exact horizontal-to-vertical border pixel ratios. It compares these spatial configurations against a pre-loaded database of manufacturer templates to detect off-center printing down to a fraction of a millimeter (e.g., matching Beckett's strict 50/50 standard).
+2. **Edge Scanner**: Tracks contrast anomalies, structural disruptions, color/pigment saturation, and high-frequency light variations along all four card boundaries to detect silvering, edge chipping, paper layer whitening, factory cutting defects, or artificial re-coloring alterations.
+3. **Corner Profiler**: Uses separate, modular computer vision models targeted by card class. It applies sharp 90-degree corner tracking for standard sports cards, and distinct multi-point radius curvature tracking for TCG cards (e.g., Pokémon, Magic: The Gathering) to detect microscopic rounding, soft stock impacts, or multi-layer paper pulp delamination (splitting).
+4. **Surface Inspector (Condition Sweep)**: Standard, flat, single-perspective digital captures cannot visualize micro-scratches, faint print lines, surface dimples, or indentation defects. 
+   * **The Protocol**: The platform initiates a guided **"Condition Sweep,"** capturing live video streams at 30 frames per second over a 3-to-5 second window while prompting the user via an onscreen UI framing overlay to smoothly tilt and rotate the card under direct lighting.
+   * **The Algorithmic Logic**: The backend analyzes rapid pixel-level contrast fluctuations (specular glare transitions) and shadow dips. It mathematically isolates vertical impressions (indentations and dimples) from horizontal surface scratches and transient dust particles, calculating exact defect depth.
 
-B. Specular Reflection Multi-Frame Surface Analysis (Live Video Stream)
+#### Module C: Forensic Counterfeit & Alteration Detection
+* **Micro-Metrology Dimension Verification**: Measures the exact physical width and height ratios of the card down to the sub-pixel level to flag altered or trimmed cards before submission.
+* **Rosette Pattern Ink Matrix Analysis**: Runs a texture frequency filter to verify the print matrix's authenticity by tracking the distinct CMYK halftone "rosette" dot patterns found in authentic production runs, flagging pixelated commercial laser counterfeits.
 
-The Challenge: Flat, single-perspective digital capture cannot visualize microscratches, faint print lines, surface dimples, or indentation defects.
-The Protocol: The system initializes a guided "Condition Sweep," capturing live video streams at 30 frames per second over a 3-to-5 second window while prompting the user to rotate or tilt the phone smoothly under direct lighting.
-The Algorithmic Logic: The backend analyzes rapid pixel-level contrast fluctuations (specular glare transitions). Persistent anomalies that reflect light uniformly across multiple angles are mathematically isolated and logged as confirmed structural blemishes (scratches, dimples, fading, or print lines).
+#### Module D: Isolated Proprietary Scoring Module
+* **The Logic Framework**: Unlike third-party application wrappers whose scoring metrics are hardcoded into an external engine, our platform uses a completely decoupled, isolated scoring formula. This allows developers to adjust sub-grade weights instantly via configuration profiles (e.g., heavily weighting surface scratches for highly sensitive holofoil/chrome cards, or modifying edge weights for vintage paper stocks) without needing to retrain or alter the underlying vision models.
 
-C. Sub-Pixel Geometric Edge & Corner Metrology — Dual-Track Centering Architecture
+---
 
-REVISED: Centering detection is not a single algorithm — it is a dispatch between two structurally different methods, selected per card, because a meaningful fraction of the modern card market (full-bleed/borderless parallels, edge-to-edge print designs) has no physical border for a border-ratio method to measure at all. Treating this as one algorithm with edge cases has been a source of real measurement failures; it needs to be treated as two methods with a selection step.
+### 5. TARGET MARKET & SCALABLE MONETIZATION STRATEGY
 
-Track 1 — Bordered Cards (physical border present):
-- Border-width ratio detection, upgraded to detect the border-to-art transition via multi-channel color deltas (not averaged single-channel brightness alone) — brightness-only thresholding is unreliable specifically on white/light borders photographed against light-colored backing, which is a common real-world case, not an edge case.
-- Validated on an ongoing basis against a physical reference card with a precisely known, pre-measured border — every algorithm change is checked against this known-answer target before being trusted on unknown cards, rather than each change being evaluated only against visual plausibility.
+#### Target Audience Segments
+1. **The Elite Alternative-Asset Investor**: High-end collectors requiring hyper-precise, repeatable metrics to confidently negotiate five- and six-figure raw asset acquisitions.
+2. **The Everyday Collector / Hobby Flipper**: Retail users looking to scan raw card inventory via mobile viewports to determine whether a card is mathematically viable for physical laboratory submission.
+3. **Bulk Brick-and-Mortar Shop Owners**: Local card shops and high-volume dealers who manage vast raw inventories and require immediate, standardized, batch-condition tagging for showcases.
+4. **TCG Players**: Active gamers requiring instantaneous condition tags (Near Mint to Damaged) to generate automated marketplace listings.
 
-Track 2 — Borderless / Full-Bleed Cards (no physical border to measure):
-- Centering is inferred from feature-based image registration: detecting fixed print elements (team wordmarks, nameplate position, logo placement, holofoil pattern anchors) and measuring their offset against a known-good reference template of that exact card/parallel, rather than measuring a border width that does not exist.
-- Requires a per-set/per-parallel template reference library — this is a genuinely larger engineering undertaking than Track 1 (template acquisition/maintenance, keypoint/homography matching per card design) and should be scoped and resourced as its own workstream, not treated as a variant of Track 1.
+#### Monetization Model
 
-Card Type Classification: A detection step (border presence/absence, ideally corroborated by set/parallel identification from the variant discrimination pipeline in Section 4E) determines which track a given scan is routed through before centering analysis runs. Misrouting a borderless card into Track 1 is an expected failure mode to guard against explicitly, not an occasional bug.
+* **Tier 1: Free Tier (The Ecosystem Hook)**
+  * Full access to the core responsive user interface and basic card inventory digital wallet.
+  * A strict, limited allocation of basic automated card scans per month.
+  * Ad-supported revenue or basic community market valuation comparisons.
+* **Tier 2: Premium Collector (The Engine Subscription)**
+  * Unlimited high-proficiency scans featuring granular pixel visual overlay reports.
+  * Advanced multi-frame surface analysis via the live video Condition Sweep protocol.
+  * Multi-device cloud synchronization (iPhone, iPad, desktop web viewports) with real-time premium market price guide integration.
+* **Tier 3: Enterprise / Shop Owner (High-Volume Processing)**
+  * Bulk processing pipelines fully compatible with high-speed sheet-fed document scanners for immediate inventory batch ingestion.
+  * Automated CSV, JSON, and data manifest exports tailored for direct ingestion into global marketplaces (eBay, TCGPlayer, Shopify shops).
 
-Edges: Tracking slight angular perspective shifts along the card profile to identify edge chipping, coloring wear, and multi-layer paper pulp separation.
+---
 
-Corners: Mathematically measuring the true radius curvature of all four points to detect microscopic rounding, soft stock, soft impacts, or structural bends. Corner analysis uses separate profiles per card category rather than one universal model: Sports Cards are evaluated against a sharp, near-90-degree corner standard, while TCG Cards (Pokémon, Magic, etc.) are evaluated against their characteristically more rounded manufactured corner radius — applying the sports standard to a TCG card (or vice versa) produces systematically wrong wear readings.
+### 6. MOBILE CROSS-PLATFORM INTERFACE & FUTURE-PROOF IMPLEMENTATION
+The technical vision is fully optimized for **iPhone and Android device ecosystems**, utilizing an **Edge-Cloud Hybrid Architecture** designed to scale fluidly with progressive hardware updates.
 
-D. Proprietary Scoring Module
+```
+       [ MOBILE DEVICE FRONTEND ]                        [ CLOUD SERVER BACKEND ]
+┌───────────────────────────────────────┐       ┌───────────────────────────────────────┐
+│ • Captures Raw Video/Images           │       │ • Flattens AI Sharpening (Anti-Dist)  │
+│ • Manages UI Overlays & Guides        │ ───►  │ • Runs High-Precision Metrology ML    │
+│ • ZERO heavy AI processing on-device  │       │ • Calculates Complex Lab Formulas     │
+└───────────────────────────────────────┘       └───────────────────────────────────────┘
+  (Immune to iOS/Android OS Breaks)               (Infinitely Upgradable & Self-Learning)
+```
 
-The scoring formula that converts raw sub-grade measurements (centering, edges, corners, surface) into a final grade is kept isolated from the vision/measurement layer, so sub-grade weights can be tuned (e.g. weighting surface scratches more heavily for holofoil/chrome finishes, where they're more visually significant) without touching or re-validating the underlying measurement code.
+* **Hardware Utilization**: Uses high-end macro lenses for micro-imperfection analysis alongside 60fps video ingestion for dynamic specular reflection mapping.
+* **On-Device Core Safety**: Zero heavy AI calculations run locally on the client phone. Keeping the vision engine and target-lab algorithms securely server-side on our cloud infrastructure (such as Replit) shields the system from OS-breaking updates on iOS or Android, protects proprietary IP from reverse-engineering, and allows instant backend metric refinements.
+* **Hardware Evolution Scaling**: As camera sensors and mobile spatial processors improve over future hardware cycles, the pipeline automatically absorbs higher baseline resolution data, increasing grading precision without requiring frontend app rewrites.
 
-E. Fine-Grained Deep Variant Discrimination
+---
 
-Integrated image fingerprinting combined with targeted OCR parsers. The app must autonomously distinguish between complex parallels (e.g., separating a Base card from a Silver Prizm, Refractor, Holo, short-print, or limited serial-numbered variation) based on surface text orientation and localized pixel arrays.
+### 7. ENGINEERING ROADMAP & SYSTEM LIFE-CYCLE
 
-This classification output feeds Section 4C's track-routing decision and, for Track 2, selects which reference template to register against.
+#### Phase 1: Interactive Core Blueprint & Spatial Routing (Complete)
+* Build and scale fluid, responsive user interfaces optimized for iPhone, iPad, and legacy desktop viewports (ensuring backward compatibility for systems running older browsers like macOS Catalina).
+* Implement native navigation routing, metric dashboard placeholder tiles, signup/onboarding validation flows, and camera system upload triggers managed via an Express backend on Port 5000.
 
-5. MONETIZATION STRATEGY (SCALABLE TIERS)
+#### Phase 2: Camera Interface & Boundary Centering Sandbox (Current)
+* Deploy the HTML5 Canvas camera viewport framework containing high-contrast, responsive visual card orientation bounding guides to standardize physical distance and scale.
+* Program server-side scripts inside `services/grading_engine.js` calculating contrast variances along card boundaries for pixel-perfect edge-to-edge centering calculations.
 
-Tier 1: Free Tier (The Hook)
-- Full access to the UI and basic card inventory wallet.
-- Limited automated scans per month.
-- Basic community market comparisons.
+#### Phase 3: The Evolutionary Engine Deployment (Next Horizon)
+* Integrate the advanced edge scanning, corner radius profiling, and automated deep variant parallel discrimination models.
+* Launch the isolated target-lab predictor formula system, running explicit profile matrices mimicking specific internal behaviors (e.g., the PSA eye-appeal model vs. the rigid BGS sub-grade matrix vs. SGC vintage guidelines).
+* Deploy the user-verification feedback loops, allowing trusted enterprise power-users to flag incorrect machine outputs. This data loops into the central machine learning registry, continuously updating accuracy.
 
-Tier 2: Premium Collector (Subscription)
-- Unlimited scans with detailed pixel visual overlay reports.
-- Cross-device cloud backup (iPhone, iPad, Mac web sync).
-- Premium market price integration.
+---
 
-Tier 3: Enterprise/Shop Owner (High Volume)
-- Bulk processing pipelines compatible with high-speed sheet-fed document scanners.
-- CSV/data inventory exports tailored for direct eBay, TCGPlayer, or Shopify ingestion.
+### 8. ABSOLUTE EXECUTION GUIDELINES FOR THE AI CO-DEVELOPER
 
-6. FUTURE NEURAL ARCHITECTURE ROADMAP
+Every AI assistant, developer, and engineer contributing to this repository must execute code according to these three uncompromised operational mandates:
 
-Decentralized Execution: Core image metrology matrices must compile to lightweight, on-device client-side scripts to remain exceptionally fast, highly scalable, and completely independent of expensive third-party vision APIs. (See Architecture Note — this is the confirmed, actual direction, not the earlier cloud-server draft.)
-
-Self-Optimizing Model Feedback: Anonymized diagnostic vectors, plus user-flagged correction loops (trusted users flagging incorrect AI outputs), will securely loop into a proprietary database registry, allowing the alignment neural network to scale its contextual intelligence with every verified scan worldwide.
-
-7. SCOPED SERVER-SIDE TRACK (RESOLVES ARCHITECTURE NOTE)
-
-Decision: the core grading pipeline (centering, edges, corners, surface) remains on-device for the primary iOS app, permanently — not a phased migration toward a server. A server-side component is still real and necessary, but only for responsibilities that are inherently central, never for the grading math itself on iOS:
-
-1. Track 2 Template Library Hosting: the per-set/per-parallel reference template library (Section 4C, Track 2) must be centrally maintained and distributed — new sets release constantly, and no device should be expected to permanently embed every template ever created. The server's job here is distribution and versioning, not measurement.
-2. Cross-Device Sync & Pricing (Tier 2): cloud backup and live market price integration are inherently server-backed already; no change needed, just formal acknowledgment that this is the server's actual job.
-3. Self-Optimizing Feedback Loop (Section 6): anonymized diagnostic vectors and user correction flags necessarily aggregate centrally to retrain the proprietary model — this was already implicitly server-side and stays that way.
-4. Enterprise/Shop Bulk Tier (Tier 3) — Scoped Exception: high-volume sheet-fed scanner ingestion is plausibly a desktop/web surface rather than iOS, meaning it has no access to Apple's Vision framework. If/when this tier is built, it is expected to need its own server-side port of the same centering/edge/corner algorithms (e.g. Python/OpenCV) to serve that surface specifically. This is a deliberate, scoped exception for a non-iOS surface — it does not imply moving the iOS app's own pipeline off-device, and the two implementations (on-device Swift, server-side port) must be validated to produce matching results against the same reference card, not developed as independently-evolving codebases.
-
-8. EXECUTION GUIDELINES FOR CONTRIBUTORS (HUMAN OR AI)
-
-1. Keep the code modular: helper files and processing logic live in separate, isolated components. Do not lump interface styling and image-processing calculations into single massive scripts. Future algorithm updates or model replacements should plug in without rewriting the core.
-2. Document with intent: functions carry structured comments so future development cycles can extend modules without re-deriving their logic from scratch.
-3. UI must be fully responsive and touch-optimized for iPhone and iPad.
+1. **Maintain Universal Accessibility & Performance**: Write all frontend logic using fluid, native CSS/HTML layout structures. The layout must never break on mobile touch viewports or older legacy desktop browsers, running light client-side or microservices scripts to minimize processing overhead.
+2. **Uphold Absolute Modular Isolation**: Architecture must be kept completely decoupled. Write helper engines, metrology scripts, and API routes into distinct, isolated directories. Never combine UI presentation styling, database connection logic, and advanced image-processing calculations into single massive scripts.
+3. **Document with Explicit Intent**: Every single written function, algorithm, and mathematical formula must include structured comments defining its architectural purpose, variable parameters, and downstream dependencies to ensure effortless upgrades during subsequent development cycles.
